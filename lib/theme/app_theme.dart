@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/app_config.dart';
 
@@ -7,6 +8,21 @@ import '../models/app_config.dart';
 class AppTheme {
   static const Color _lightBg = Color(0xFFF5F6F8);
   static const Color _darkBg = Color(0xFF0C0E12);
+
+  /// Keeps the Android status/navigation bars flush with the app background
+  /// instead of letting the platform paint a mismatched band above the UI.
+  static SystemUiOverlayStyle systemUi(bool dark) {
+    final Color bar = dark ? _darkBg : _lightBg;
+    return SystemUiOverlayStyle(
+      statusBarColor: bar,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: bar,
+      systemNavigationBarIconBrightness:
+          dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarDividerColor: bar,
+    );
+  }
 
   static ThemeData build(int seed, Brightness brightness, double fontScale) {
     final bool dark = brightness == Brightness.dark;
@@ -52,6 +68,7 @@ class AppTheme {
       primaryTextTheme: text,
       appBarTheme: AppBarTheme(
         elevation: 0,
+        systemOverlayStyle: systemUi(dark),
         scrolledUnderElevation: 0,
         centerTitle: false,
         backgroundColor: Colors.transparent,

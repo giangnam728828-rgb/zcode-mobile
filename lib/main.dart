@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'l10n/strings.dart';
@@ -30,6 +31,16 @@ class ZCodeApp extends StatelessWidget {
             theme: AppTheme.build(accent.seed, Brightness.light, scale),
             darkTheme: AppTheme.build(accent.seed, Brightness.dark, scale),
             themeMode: AppTheme.modeOf(c?.themeMode ?? 'system'),
+            // Setup and settings pages have no AppBar, so the bars are tinted
+            // here for every route rather than only on scaffolded screens.
+            builder: (BuildContext ctx, Widget? child) {
+              final bool dark =
+                  Theme.of(ctx).brightness == Brightness.dark;
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: AppTheme.systemUi(dark),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const _Root(),
           );
         },
