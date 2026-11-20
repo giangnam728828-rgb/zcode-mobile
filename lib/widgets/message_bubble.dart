@@ -1,9 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../agent/tools.dart';
 import '../l10n/strings.dart';
+import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import 'markdown_text.dart';
+import 'tool_card.dart';
 
 /// One message. User messages are right-aligned bubbles; assistant messages
 /// are full-width cards without a bubble so code has room to breathe.
@@ -17,6 +22,9 @@ class MessageBubble extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onRetry,
+    this.onQuote,
+    this.resolvePath,
+    this.tools = const <ToolCall>[],
   }) : super(key: key);
 
   final ChatMessage message;
@@ -26,6 +34,14 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onRetry;
+  final VoidCallback? onQuote;
+
+  /// Turns a workspace-relative attachment path into an absolute one.
+  final String Function(String path)? resolvePath;
+
+  /// Tool calls that belong to this turn; rendered between the answer and the
+  /// action row so the transcript reads in chronological order.
+  final List<ToolCall> tools;
 
   @override
   Widget build(BuildContext context) {
@@ -58,13 +74,25 @@ class MessageBubble extends StatelessWidget {
                     color: cs.primary.withOpacity(dark ? 0.28 : 0.16),
                   ),
                 ),
-                child: Text(
-                  message.text,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 15,
-                    height: 1.55,
-                    color: cs.onSurface,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    if (message.attachments.isNotEmpty)
+                      _Attachments(
+                        attachments: message.attachments,
+                        resolvePath: resolvePath,
+                        alignEnd: true,
+                      ),
+                    if (message.text.trim().isNotEmpty)
+                      Text(
+                        message.text,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 15,
+                          height: 1.55,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -156,6 +184,19 @@ class MessageBubble extends StatelessWidget {
                 ],
               ),
             ),
+          for (final ToolCall t in tools) ToolCard(call: t),
+          if (!message.streaming && message.tokenLabel.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 2, top: 7),
+              child: Text(
+                message.tokenLabel,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  letterSpacing: 0.2,
+                  color: cs.onSurface.withOpacity(0.3),
+                ),
+              ),
+            ),
           if (!message.streaming && !empty) _actions(context, cs, dark),
         ],
       ),
@@ -182,6 +223,13 @@ class MessageBubble extends StatelessWidget {
                 ));
             },
           ),
+          if (onQuote != null)
+            _MiniAction(
+              icon: Icons.format_quote_rounded,
+              label: s.isEnglish ? 'Quote' : '引用',
+              color: tint,
+              onTap: onQuote!,
+            ),
           if (isLast && onRegenerate != null)
             _MiniAction(
               icon: Icons.refresh_rounded,
@@ -217,6 +265,15 @@ class MessageBubble extends StatelessWidget {
                     .showSnackBar(SnackBar(content: Text(s.copied)));
               },
             ),
+            if (onQuote != null)
+              ListTile(
+                leading: const Icon(Icons.format_quote_rounded),
+                title: Text(s.isEnglish ? 'Quote in reply' : '引用回复'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onQuote!();
+                },
+              ),
             if (message.isUser && onEdit != null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -265,7 +322,7 @@ class _Avatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       alignment: Alignment.center,
-      child: const Icon(Icons.bolt_rounded, size: 13, color: Colors.white),
+      child: Icon(Icons.bolt_rounded, size: 13, color: Theme.of(context).colorScheme.onPrimary),
     );
   }
 }
@@ -509,6 +566,85 @@ class _MiniAction extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// Attachment strip shown inside user bubbles: image thumbnails plus compact
+/// file chips, so a photo sent to the model is visible in the transcript.
+class _Attachments extends StatelessWidget {
+  const _Attachments({
+    required this.attachments,
+    required this.resolvePath,
+    this.alignEnd = false,
+  });
+
+  final List<Attachment> attachments;
+  final String Function(String path)? resolvePath;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        alignment: alignEnd ? WrapAlignment.end : WrapAlignment.start,
+        children: <Widget>[
+          for (final Attachment a in attachments)
+            if (a.isImage && resolvePath != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.file(
+                  File(resolvePath!(a.path)),
+                  width: 132,
+                  height: 96,
+                  fit: BoxFit.cover,
+                  errorBuilder: (BuildContext ctx, Object e, StackTrace? st) =>
+                      _fileChip(cs, a),
+                ),
+              )
+            else
+              _fileChip(cs, a),
+        ],
+      ),
+    );
+  }
+
+  Widget _fileChip(ColorScheme cs, Attachment a) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: cs.onSurface.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cs.onSurface.withOpacity(0.09)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            a.isImage ? Icons.image_outlined : Icons.description_outlined,
+            size: 13,
+            color: cs.onSurface.withOpacity(0.55),
+          ),
+          const SizedBox(width: 5),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 170),
+            child: Text(
+              a.sizeLabel.isEmpty ? a.name : '${a.name} · ${a.sizeLabel}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: cs.onSurface.withOpacity(0.65),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

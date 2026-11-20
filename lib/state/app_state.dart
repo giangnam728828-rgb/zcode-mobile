@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,9 +7,11 @@ import 'package:flutter/foundation.dart';
 import '../agent/agent_runner.dart';
 import '../agent/tools.dart';
 import '../models/app_config.dart';
+import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../services/account.dart';
+import '../services/modules.dart';
 import '../services/store.dart';
 
 /// Single source of truth for the signed-in account, conversations and the
@@ -24,10 +27,17 @@ class AppState extends ChangeNotifier {
   String? error;
 
   /// Messages typed while a turn is running; flushed one by one when it ends.
-  final List<String> queue = <String>[];
+  /// Attachments ride along so nothing is silently dropped on a queue.
+  final List<_QueuedTurn> _queue = <_QueuedTurn>[];
+
+  List<String> get queue =>
+      <String>[for (final _QueuedTurn q in _queue) q.text];
 
   /// Tool waiting for the user's go-ahead, surfaced as a dialog by the chat page.
   ToolCall? pendingApproval;
+
+  ModuleCenter? moduleCenter;
+  List<String> fileIndex = <String>[];
 
   final AccountService _account = AccountService();
   ToolBox? _toolbox;
@@ -37,6 +47,7 @@ class AppState extends ChangeNotifier {
   bool _cancelRequested = false;
   Timer? _persist;
   Timer? _drain;
+  Timer? _indexRefresh;
 
   String _pendingText = '';
   String _pendingThink = '';
@@ -47,6 +58,9 @@ class AppState extends ChangeNotifier {
     config = await Store.loadConfig() ?? AppConfig.empty;
     session = await _account.restore();
     _toolbox = await ToolBox.open();
+    moduleCenter = ModuleCenter(_toolbox!.workspace);
+    await moduleCenter!.load();
+    _applyModulePaths();
     final List<Conversation> loaded = await Store.loadConversations();
     conversations
       ..clear()
@@ -58,6 +72,7 @@ class AppState extends ChangeNotifier {
     currentId = conversations.first.id;
     ready = true;
     notifyListeners();
+    unawaited(refreshFileIndex());
   }
 
   Conversation? get current {
@@ -74,6 +89,19 @@ class AppState extends ChangeNotifier {
 
   bool get needsReauth => session != null && session!.expired;
 
+  ToolBox? get tools => _toolbox;
+
+  /// Test hook: point the app at a temporary workspace without plugins.
+  @visibleForTesting
+  void debugUseWorkspace(ToolBox box) {
+    _toolbox = box;
+    notifyListeners();
+  }
+
+  Directory? get workspace => _toolbox?.workspace;
+
+  String get workspacePath => _toolbox?.workspace.path ?? '';
+
   /// Changes only when a finished message lands, so settled bubbles can skip
   /// rebuilding on every streaming tick.
   String get historyFingerprint {
@@ -84,6 +112,20 @@ class AppState extends ChangeNotifier {
       if (!m.streaming) done++;
     }
     return '${c.id}|${c.messages.length}|$done';
+  }
+
+  int get contextChars {
+    int n = 0;
+    final String summary = current?.summary ?? '';
+    n += summary.length;
+    for (final ChatMessage m in messages) {
+      if (m.compacted) continue;
+      n += m.text.length + m.thinking.length;
+      for (final ToolCall t in m.tools) {
+        n += t.output.length;
+      }
+    }
+    return n;
   }
 
   // ------------------------------------------------------------------- account
@@ -148,6 +190,8 @@ class AppState extends ChangeNotifier {
     double? fontScale,
     String? language,
     String? approvalMode,
+    double? temperature,
+    bool? autoCompact,
   }) async {
     final AppConfig? c = config;
     if (c == null) return;
@@ -157,6 +201,8 @@ class AppState extends ChangeNotifier {
       fontScale: fontScale,
       language: language,
       approvalMode: approvalMode,
+      temperature: temperature,
+      autoCompact: autoCompact,
     ));
   }
 
@@ -231,6 +277,8 @@ class AppState extends ChangeNotifier {
     final Conversation? c = current;
     if (c == null) return;
     c.messages.clear();
+    c.summary = '';
+    c.compactedCount = 0;
     notifyListeners();
     _schedulePersist();
   }
@@ -244,31 +292,75 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void send(String text) {
-    final String content = text.trim();
-    if (content.isEmpty) return;
+  void send(
+    String text, {
+    List<Attachment> attachments = const <Attachment>[],
+    String? quote,
+  }) {
+    String content = text.trim();
+    if (quote != null && quote.trim().isNotEmpty) {
+      final String q = quote
+          .trim()
+          .split('\n')
+          .map((String l) => '> $l')
+          .join('\n');
+      content = content.isEmpty ? q : '$q\n\n$content';
+    }
+    if (content.isEmpty && attachments.isEmpty) return;
     if (streaming) {
-      queue.add(content);
+      _queue.add(_QueuedTurn(content, attachments));
       notifyListeners();
       return;
     }
-    _startTurn(content);
+    _startTurn(content, attachments: attachments);
   }
 
   void flushQueueNow() {
-    if (queue.isEmpty) return;
-    final String next = queue.removeAt(0);
+    if (_queue.isEmpty) return;
+    final _QueuedTurn next = _queue.removeAt(0);
     stop(flushQueue: false);
-    _startTurn(next);
+    _startTurn(next.text, attachments: next.attachments);
   }
 
   void removeQueued(int index) {
-    if (index < 0 || index >= queue.length) return;
-    queue.removeAt(index);
+    if (index < 0 || index >= _queue.length) return;
+    _queue.removeAt(index);
     notifyListeners();
   }
 
-  void _startTurn(String content) {
+  /// Picks up `@path` mentions that point at real files and turns them into
+  /// attachments, so the model gets the contents without the user hunting for
+  /// an attach button.
+  List<Attachment> _fromMentions(String text, List<Attachment> explicit) {
+    final List<Attachment> out = List<Attachment>.from(explicit);
+    final Set<String> seen = out.map((Attachment a) => a.path).toSet();
+    final ToolBox? box = _toolbox;
+    if (box == null) return out;
+    for (final RegExpMatch m in RegExp(r'@([^\s@]+)').allMatches(text)) {
+      final String raw = m.group(1) ?? '';
+      if (raw.isEmpty || raw.startsWith('/')) continue;
+      final String abs = box.resolvePath(raw);
+      final File f = File(abs);
+      if (!f.existsSync() || seen.contains(raw)) continue;
+      if (FileSystemEntity.isDirectorySync(abs)) continue;
+      out.add(Attachment(
+        path: raw,
+        name: abs.split('/').last,
+        isImage: Attachment.looksLikeImage(abs),
+        size: f.lengthSync(),
+        mediaType: Attachment.looksLikeImage(abs)
+            ? Attachment.guessMediaType(abs)
+            : null,
+      ));
+      seen.add(raw);
+    }
+    return out;
+  }
+
+  void _startTurn(
+    String content, {
+    List<Attachment> attachments = const <Attachment>[],
+  }) {
     final AppConfig? cfg = config;
     final Conversation? c = current;
     if (session == null) {
@@ -279,10 +371,15 @@ class AppState extends ChangeNotifier {
     if (cfg == null || c == null) return;
 
     error = null;
+    final List<Attachment> files = _fromMentions(content, attachments);
+    if (cfg.autoCompact && contextChars > 48000 && messages.length > 10) {
+      compact();
+    }
     c.messages.add(ChatMessage(
       id: 'u${DateTime.now().microsecondsSinceEpoch}',
       role: Sender.user,
       text: content,
+      attachments: files,
     ));
     final ChatMessage assistant = ChatMessage(
       id: 'a${DateTime.now().microsecondsSinceEpoch}',
@@ -304,28 +401,139 @@ class AppState extends ChangeNotifier {
     _run(cfg, List<ChatMessage>.from(c.messages), assistant);
   }
 
-  String _systemPrompt(AppConfig cfg) {
-    final String ws = _toolbox?.workspace.path ?? '(unavailable)';
-    return '${cfg.systemPrompt}\n\n'
-        '## Runtime\n'
-        'You are running inside an Android app. Your workspace is $ws — this is '
-        'the app sandbox, not the whole phone.\n'
-        'You have real tools: bash (sh + toybox utilities), read_file, write_file, '
-        'edit_file, list_dir, grep. Use them instead of guessing: inspect before '
-        'editing, and run code to verify your work.\n'
-        'Rules: keep paths inside the workspace, prefer small targeted edits, and '
-        'never claim a command succeeded unless you ran it and saw the output. '
-        'When a task is done, summarise what changed and how it was verified.';
+  static const String agentsTemplate = '''# 项目说明
+
+给智能体的常驻说明，每次对话都会自动读取（也可以命名为 ZCODE.md）。
+
+## 技术栈
+
+## 运行与测试
+
+## 约定与注意事项
+''';
+
+  /// Reads AGENTS.md / ZCODE.md and lists project skills, mirroring how the
+  /// desktop client picks up repo rules.
+  Future<String> _projectContext() async {
+    final ToolBox? box = _toolbox;
+    if (box == null) return '';
+    final StringBuffer out = StringBuffer();
+    for (final String name in <String>['AGENTS.md', 'ZCODE.md']) {
+      final File f = File(box.resolvePath(name));
+      if (!await f.exists()) continue;
+      try {
+        String text = await f.readAsString();
+        if (text.length > 8000) {
+          text = '${text.substring(0, 8000)}\n… [truncated]';
+        }
+        out.writeln('\n## Project instructions ($name)');
+        out.writeln(text.trim());
+        break;
+      } catch (_) {}
+    }
+    final Directory skills = Directory(box.resolvePath('.zcode/skills'));
+    if (await skills.exists()) {
+      final List<String> rows = <String>[];
+      try {
+        await for (final FileSystemEntity e in skills.list()) {
+          if (e is! File || !e.path.endsWith('.md')) continue;
+          String desc = '';
+          try {
+            final List<String> lines =
+                (await e.readAsString()).split('\n');
+            for (final String line in lines) {
+              final String t = line.trim();
+              if (t.isEmpty || t.startsWith('#')) continue;
+              desc = t.length > 160 ? '${t.substring(0, 160)}…' : t;
+              break;
+            }
+          } catch (_) {}
+          rows.add('- ${box.relPath(e.path)}${desc.isEmpty ? '' : ' — $desc'}');
+          if (rows.length >= 12) break;
+        }
+      } catch (_) {}
+      if (rows.isNotEmpty) {
+        out.writeln('\n## Project skills');
+        out.writeln('Read the relevant skill file before using it:');
+        out.writeln(rows.join('\n'));
+      }
+    }
+    return out.toString().trim();
   }
 
-  List<Map<String, dynamic>> _wireFrom(List<ChatMessage> history) {
+  Future<String> _systemPrompt(AppConfig cfg) async {
+    final String ws = _toolbox?.workspace.path ?? '(unavailable)';
+    final String mods = moduleCenter?.installed.isNotEmpty == true
+        ? moduleCenter!.installed
+            .map((InstalledModule m) => m.commands.join(', '))
+            .join('; ')
+        : 'none installed';
+    return '${cfg.systemPrompt}\n\n'
+        '## Runtime\n'
+        'You are running inside an Android app, not on a server. Your workspace '
+        'is $ws and every file tool is sandboxed to it.\n'
+        'Available tools: bash (sh + toybox, PATH already includes module bins), '
+        'read_file, write_file, edit_file, list_dir, glob, grep, make_dir, '
+        'move_file, delete_file, web_fetch, todo_write.\n'
+        'Installed CLI modules: $mods. If a missing runtime (node, python, git) '
+        'blocks the task, say so and suggest installing a module instead of '
+        'pretending it worked.\n'
+        'Working rules:\n'
+        '- For anything with more than two steps, call todo_write first and keep '
+        'it updated as you go.\n'
+        '- Inspect before editing. Prefer small, exact edits over rewrites.\n'
+        '- Verify by running code or commands; never claim success without '
+        'seeing the output.\n'
+        '- Keep paths inside the workspace, and finish with a short summary of '
+        'what changed and how it was verified.'
+        '${await _projectContext()}';
+  }
+
+  Future<List<Map<String, dynamic>>> _wireFrom(
+      List<ChatMessage> history) async {
     final List<Map<String, dynamic>> wire = <Map<String, dynamic>>[];
+    final String summary = current?.summary.trim() ?? '';
+    if (summary.isNotEmpty) {
+      wire.add(<String, dynamic>{
+        'role': 'user',
+        'content': 'Context from earlier in this conversation, already '
+            'completed (summary):\n$summary',
+      });
+      wire.add(<String, dynamic>{
+        'role': 'assistant',
+        'content': 'Understood — I have that earlier context.',
+      });
+    }
     for (final ChatMessage m in history) {
-      if (m.role == Sender.system) continue;
+      if (m.role == Sender.system || m.compacted) continue;
       if (m.role == Sender.user) {
+        final List<Map<String, dynamic>> parts = <Map<String, dynamic>>[];
         if (m.text.trim().isNotEmpty) {
-          wire.add(<String, dynamic>{'role': 'user', 'content': m.text});
+          parts.add(<String, dynamic>{'type': 'text', 'text': m.text});
         }
+        for (final Attachment a in m.attachments) {
+          final String? block = await _attachmentBlock(a);
+          if (block == null) continue;
+          if (a.isImage) {
+            parts.add(<String, dynamic>{
+              'type': 'image',
+              'source': <String, dynamic>{
+                'type': 'base64',
+                'media_type': a.mediaType ?? Attachment.guessMediaType(a.name),
+                'data': block,
+              },
+            });
+          } else {
+            parts.add(<String, dynamic>{'type': 'text', 'text': block});
+          }
+        }
+        if (parts.isEmpty) continue;
+        wire.add(<String, dynamic>{
+          'role': 'user',
+          'content': parts.length == 1 && parts.first['type'] == 'text'
+              ? parts.first['text']
+              : parts,
+        });
         continue;
       }
       final List<Map<String, dynamic>> content = <Map<String, dynamic>>[];
@@ -333,7 +541,7 @@ class AppState extends ChangeNotifier {
         content.add(<String, dynamic>{'type': 'text', 'text': m.text});
       }
       for (final ToolCall t in m.tools) {
-        if (t.id.isEmpty) continue;
+        if (t.id.isEmpty || t.status == ToolStatus.denied) continue;
         content.add(<String, dynamic>{
           'type': 'tool_use',
           'id': t.id,
@@ -360,6 +568,35 @@ class AppState extends ChangeNotifier {
     return wire;
   }
 
+  /// Reads an attachment for the wire format: base64 for images, fenced text
+  /// for source files (capped so one huge file cannot eat the context).
+  Future<String?> _attachmentBlock(Attachment a) async {
+    final ToolBox? box = _toolbox;
+    if (box == null) return null;
+    final File f = File(box.resolvePath(a.path));
+    if (!await f.exists()) return null;
+    try {
+      if (a.isImage) {
+        final int size = await f.length();
+        if (size > 3 * 1024 * 1024) return null;
+        return base64Encode(await f.readAsBytes());
+      }
+      final int size = await f.length();
+      if (size > 512 * 1024) {
+        return 'File: ${a.path} (${(size / 1024).toStringAsFixed(0)} KB, too '
+            'large to inline — use read_file with offset/limit)';
+      }
+      String body = await f.readAsString();
+      if (body.contains('\u0000')) return 'File: ${a.path} (binary)';
+      if (body.length > 24000) {
+        body = '${body.substring(0, 24000)}\n… [truncated at 24k chars]';
+      }
+      return 'File: ${a.path}\n```\n$body\n```';
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _run(
     AppConfig cfg,
     List<ChatMessage> history,
@@ -371,19 +608,24 @@ class AppState extends ChangeNotifier {
       await _refreshIfNeeded();
       final AccountSession s = session!;
 
+      box.beginTurn();
       final AgentRunner runner = AgentRunner(
         baseUrl: cfg.baseUrl,
         token: s.projectToken,
         model: cfg.model,
         toolbox: box,
         maxTokens: cfg.maxTokens,
+        maxSteps: cfg.maxSteps,
+        temperature: cfg.temperature,
       );
       _runner = runner;
 
+      final List<Map<String, dynamic>> wire =
+          await _wireFrom(history.where((ChatMessage m) => m.id != target.id).toList());
+
       await runner.run(
-        wire: _wireFrom(
-            history.where((ChatMessage m) => m.id != target.id).toList()),
-        systemPrompt: _systemPrompt(cfg),
+        wire: wire,
+        systemPrompt: await _systemPrompt(cfg),
         onText: (String text) {
           if (_cancelRequested) return;
           _pendingText += text;
@@ -398,8 +640,16 @@ class AppState extends ChangeNotifier {
           target.tools.add(call);
           notifyListeners();
         },
-        onToolUpdate: (ToolCall call) => notifyListeners(),
+        onToolUpdate: (ToolCall call) {
+          notifyListeners();
+          _scheduleIndexRefresh();
+        },
         approve: (ToolCall call) => _approve(call),
+        onUsage: (int input, int output) {
+          target.inputTokens = input;
+          target.outputTokens = output;
+          notifyListeners();
+        },
       );
 
       if (!_cancelRequested) await _flushPacer();
@@ -438,6 +688,7 @@ class AppState extends ChangeNotifier {
       _sortConversations();
       notifyListeners();
       _schedulePersist();
+      _scheduleIndexRefresh();
       _drainQueue();
     }
   }
@@ -446,11 +697,14 @@ class AppState extends ChangeNotifier {
   Future<bool> _approve(ToolCall call) async {
     final String mode = config?.approvalMode ?? 'risky';
     if (mode == 'auto') return true;
+    if (call.name == 'todo_write') return true;
     final ToolBox? box = _toolbox;
     final bool risky = box?.requiresApproval(call) ?? true;
     final bool readOnly = call.name == 'read_file' ||
         call.name == 'list_dir' ||
-        call.name == 'grep';
+        call.name == 'grep' ||
+        call.name == 'glob' ||
+        call.name == 'web_fetch';
     if (readOnly) return true;
     if (mode == 'risky' && !risky) return true;
 
@@ -472,10 +726,10 @@ class AppState extends ChangeNotifier {
   }
 
   void _drainQueue() {
-    if (queue.isEmpty) return;
-    final String next = queue.removeAt(0);
+    if (_queue.isEmpty) return;
+    final _QueuedTurn next = _queue.removeAt(0);
     Future<void>.delayed(const Duration(milliseconds: 260), () {
-      if (!streaming) _startTurn(next);
+      if (!streaming) _startTurn(next.text, attachments: next.attachments);
     });
   }
 
@@ -533,7 +787,7 @@ class AppState extends ChangeNotifier {
       _approval!.complete(false);
     }
     _runner?.cancel();
-    if (!flushQueue) queue.clear();
+    if (!flushQueue) _queue.clear();
     notifyListeners();
   }
 
@@ -548,10 +802,10 @@ class AppState extends ChangeNotifier {
       }
     }
     if (lastUser < 0) return;
-    final String prompt = c.messages[lastUser].text;
+    final ChatMessage prompt = c.messages[lastUser];
     c.messages.removeRange(lastUser, c.messages.length);
     notifyListeners();
-    _startTurn(prompt);
+    _startTurn(prompt.text, attachments: prompt.attachments);
   }
 
   void editAndResend(String messageId, String text) {
@@ -565,9 +819,42 @@ class AppState extends ChangeNotifier {
       }
     }
     if (at < 0) return;
+    final List<Attachment> files = c.messages[at].attachments;
     c.messages.removeRange(at, c.messages.length);
     notifyListeners();
-    _startTurn(text);
+    _startTurn(text, attachments: files);
+  }
+
+  /// Rolls back every file the last turn touched.
+  Future<int> undoLastTurn() async {
+    final int n = await _toolbox?.undoLastTurn() ?? 0;
+    notifyListeners();
+    return n;
+  }
+
+  bool get canUndo => _toolbox?.canUndo ?? false;
+
+  /// Forks a conversation, keeping the transcript but not the running turn.
+  Conversation duplicateConversation(String id) {
+    Conversation source = conversations.firstWhere(
+      (Conversation c) => c.id == id,
+      orElse: () => conversations.first,
+    );
+    final Conversation copy = Conversation.fromJson(source.toJson());
+    final Conversation fork = Conversation(
+      id: 'c${DateTime.now().microsecondsSinceEpoch}',
+      title: source.previewTitle().isEmpty
+          ? '副本'
+          : '${source.previewTitle()} · 副本',
+      messages: copy.messages,
+      summary: source.summary,
+      compactedCount: source.compactedCount,
+    );
+    conversations.insert(0, fork);
+    currentId = fork.id;
+    notifyListeners();
+    _schedulePersist();
+    return fork;
   }
 
   void deleteMessage(String id) {
@@ -577,6 +864,167 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     _schedulePersist();
   }
+
+  // -------------------------------------------------------------- compaction
+
+  /// Folds older turns into a compact digest. The visible transcript stays,
+  /// but those bubbles are skipped on replay so the model gets room to work.
+  int compact() {
+    final Conversation? c = current;
+    if (c == null) return 0;
+    final List<ChatMessage> live =
+        c.messages.where((ChatMessage m) => !m.compacted).toList();
+    if (live.length <= 6) return 0;
+    final int keep = live.length > 16 ? 8 : 6;
+    final List<ChatMessage> fold = live.sublist(0, live.length - keep);
+    if (fold.isEmpty) return 0;
+
+    final StringBuffer b = StringBuffer();
+    final Set<String> files = <String>{};
+    for (final ChatMessage m in fold) {
+      if (m.isUser && m.text.trim().isNotEmpty) {
+        final String t = m.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+        b.writeln('- 用户：${t.length > 160 ? '${t.substring(0, 160)}…' : t}');
+      }
+      for (final ToolCall t in m.tools) {
+        if (t.name == 'write_file' ||
+            t.name == 'edit_file' ||
+            t.name == 'move_file' ||
+            t.name == 'delete_file') {
+          final Object? p = t.input['path'] ?? t.input['to'];
+          if (p != null) files.add('$p');
+        }
+      }
+      if (m.attachments.isNotEmpty) {
+        files.addAll(m.attachments.map((Attachment a) => a.path));
+      }
+    }
+    if (files.isNotEmpty) {
+      b.writeln('- 涉及文件：${files.take(12).join(', ')}');
+    }
+
+    final String merged = <String>[
+      if (c.summary.trim().isNotEmpty) c.summary.trim(),
+      b.toString().trim(),
+    ].where((String s) => s.isNotEmpty).join('\n');
+    c.summary = merged.length > 4000
+        ? '…${merged.substring(merged.length - 4000)}'
+        : merged;
+    for (final ChatMessage m in fold) {
+      m.compacted = true;
+    }
+    c.compactedCount += fold.length;
+    notifyListeners();
+    _schedulePersist();
+    return fold.length;
+  }
+
+  void clearSummary() {
+    final Conversation? c = current;
+    if (c == null) return;
+    c.summary = '';
+    for (final ChatMessage m in c.messages) {
+      m.compacted = false;
+    }
+    c.compactedCount = 0;
+    notifyListeners();
+    _schedulePersist();
+  }
+
+  // -------------------------------------------------------------------- files
+
+  Future<void> refreshFileIndex() async {
+    final ToolBox? box = _toolbox;
+    if (box == null) return;
+    try {
+      final List<String> next = await box.listFiles();
+      if (!listEquals(next, fileIndex)) {
+        fileIndex = next;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  void _scheduleIndexRefresh() {
+    _indexRefresh?.cancel();
+    _indexRefresh = Timer(const Duration(seconds: 3), () {
+      unawaited(refreshFileIndex());
+    });
+  }
+
+  /// Cheap prefix/substring match used by the `@` mention picker.
+  List<String> suggestFiles(String query, {int limit = 6}) {
+    final String q = query.trim().toLowerCase();
+    if (q.isEmpty) return fileIndex.take(limit).toList();
+    final List<String> starts = <String>[];
+    final List<String> contains = <String>[];
+    for (final String p in fileIndex) {
+      final String lower = p.toLowerCase();
+      if (lower.split('/').last.startsWith(q)) {
+        starts.add(p);
+      } else if (lower.contains(q)) {
+        contains.add(p);
+      }
+      if (starts.length >= limit) break;
+    }
+    return <String>[...starts, ...contains].take(limit).toList();
+  }
+
+  Future<String> runShell(String command, {int timeout = 60}) async {
+    final ToolBox? box = _toolbox;
+    if (box == null) return '工具环境尚未就绪';
+    return box.shell(command, timeout: timeout);
+  }
+
+  Future<Attachment?> attach(String relativePath) async {
+    final ToolBox? box = _toolbox;
+    if (box == null) return null;
+    final File f = File(box.resolvePath(relativePath));
+    if (!await f.exists()) return null;
+    return Attachment.of(f, relativePath);
+  }
+
+  // ------------------------------------------------------------------ modules
+
+  void _applyModulePaths() {
+    final ToolBox? box = _toolbox;
+    final ModuleCenter? mc = moduleCenter;
+    if (box == null || mc == null) return;
+    box.extraPaths
+      ..clear()
+      ..addAll(mc.binPaths);
+  }
+
+  Future<void> installBuiltinModule(String id) async {
+    final ModuleCenter? mc = moduleCenter;
+    if (mc == null) return;
+    ModuleSpec? spec;
+    for (final ModuleSpec s in ModuleCenter.catalog) {
+      if (s.id == id) spec = s;
+    }
+    if (spec == null) return;
+    await mc.install(spec);
+    _applyModulePaths();
+    notifyListeners();
+  }
+
+  Future<void> installRemoteModule(String url, {String? name}) async {
+    final ModuleCenter? mc = moduleCenter;
+    if (mc == null) return;
+    await mc.installArchive(url, name: name);
+    _applyModulePaths();
+    notifyListeners();
+  }
+
+  Future<void> removeModule(String id) async {
+    final ModuleCenter? mc = moduleCenter;
+    if (mc == null) return;
+    await mc.remove(id);
+    _applyModulePaths();
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------------ persist
 
   void _schedulePersist() {
     _persist?.cancel();
@@ -588,6 +1036,8 @@ class AppState extends ChangeNotifier {
   Future<void> clearAllData() async {
     for (final Conversation c in conversations) {
       c.messages.clear();
+      c.summary = '';
+      c.compactedCount = 0;
     }
     await Store.saveConversations(conversations);
     notifyListeners();
@@ -599,13 +1049,20 @@ class AppState extends ChangeNotifier {
     return c.toMarkdown();
   }
 
-  Directory? get workspace => _toolbox?.workspace;
-
   @override
   void dispose() {
     _persist?.cancel();
     _drain?.cancel();
+    _indexRefresh?.cancel();
     _account.dispose();
     super.dispose();
   }
+}
+
+
+class _QueuedTurn {
+  _QueuedTurn(this.text, this.attachments);
+
+  final String text;
+  final List<Attachment> attachments;
 }

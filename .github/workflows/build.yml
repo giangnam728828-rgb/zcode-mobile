@@ -1,8 +1,9 @@
 name: android
 
+# Push code without burning Actions minutes: builds only run for a tag or a
+# manual dispatch from the Actions tab.
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 

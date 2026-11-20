@@ -1,11 +1,11 @@
 # ZCode Mobile
 
-**装在手机里的 ZCode 智能体** —— 用平台账号登录（不填 API Key），登录后 Agent 能在手机本地**真跑 shell 命令、真改文件**，和桌面端共用同一份套餐额度。
+**装在手机里的 ZCode 智能体** —— 用平台账号登录（不填 API Key），登录后 Agent 能在手机本地**真跑 shell 命令、真改文件**，和桌面端共用同一份套餐额度。v3 补齐了文件管理、终端、扩展模块、回合撤销、上下文压缩与项目规则，交互按手机重做，不再是一个套壳网页。
 
 <p align="center">
-  <img src="docs/chat.png" width="190" alt="对话">
-  <img src="docs/drawer.png" width="190" alt="会话">
-  <img src="docs/queue.png" width="190" alt="工具调用">
+  <img src="docs/chat.png" width="190" alt="对话与工具">
+  <img src="docs/tools.png" width="190" alt="计划与审批">
+  <img src="docs/modules.png" width="190" alt="扩展模块">
 </p>
 
 > 社区非官方客户端，与智谱 / Z.ai 无隶属关系。Agent 只在应用私有工作区内执行，不碰系统其它数据。
@@ -36,30 +36,77 @@
 
 ## Agent：真的会在手机上干活
 
-内置工具循环（Anthropic 兼容的 `tool_use` / `tool_result`）：
+内置 12 个工具，走 Anthropic 兼容的 `tool_use` / `tool_result` 循环：
 
 | 工具 | 能力 |
 |---|---|
-| `bash` | `sh` + Android toybox：ls / cat / grep / sed / find / curl…，可跑脚本 |
-| `read_file` | 按行读取，带 offset / limit |
-| `write_file` | 新建或覆盖（自动建目录） |
+| `bash` | `sh` + toybox：ls / cat / grep / sed / find / tar…，可跑脚本；PATH 自动带上已装模块 |
+| `read_file` | 按行读取，带 offset / limit，二进制与超大文件会被拦下 |
+| `write_file` | 新建或覆盖（自动建目录），写前自动做快照 |
 | `edit_file` | 精确替换一段内容，重复匹配会拒绝 |
-| `list_dir` | 列目录 |
-| `grep` | 正则搜索，支持 glob |
+| `list_dir` | 列目录，带文件大小，目录优先 |
+| `glob` | `*` / `?` / `**` 模式找文件 |
+| `grep` | 正则搜索，支持 glob 过滤、跳过 `.git` 与二进制 |
+| `make_dir` | 递归建目录 |
+| `move_file` | 移动 / 重命名，目标已存在会拒绝 |
+| `delete_file` | 删除文件；非空目录需显式 `recursive` |
+| `web_fetch` | 抓 http(s) 页面/接口，HTML 转可读文本 |
+| `todo_write` | 发布任务清单，手机上直接渲染成带进度的计划卡 |
 
-安全边界：
+安全与掌控：
 
 - 工作区固定在应用私有目录（`/data/data/ai.zcode.zcode_mobile/files/workspace`），`..` 越权路径会被规范化后拒绝（有测试覆盖）；
-- **审批三档**：`risky`（默认，`rm`/`mv`/重定向/写文件才问）、`ask`（每个工具都问）、`auto`（全放开）；
-- 审批弹窗里能看到**完整命令**，拒绝后模型会收到 denied，不会偷偷执行；
-- 每次调用在对话里是一张可展开的卡片：命令 + 输出 + 退出码。
+- **审批三档**：`risky`（默认，删除 / 移动 / 破坏性 shell 才问）、`ask`（每个工具都问）、`auto`（全放开）；
+- 审批弹窗显示完整命令或 diff 行数，拒绝后模型收到 denied，不会偷偷执行；
+- **回合撤销**：写文件前自动快照，`/undo` 或菜单「撤销本轮改动」可把整轮改动还原（新建的文件会被删掉）；
+- 每次调用在对话里是一张卡片：命令、输出、退出码、耗时，长输出可展开、可复制。
 
-## 功能
+## 与桌面版的功能对照
 
-- **会话**：多会话、自动标题、置顶、归档、搜索、重命名、删除
-- **对话**：SSE 流式、Markdown、代码卡片、思考折叠、复制 / 重生成 / 编辑重发
-- **输入**：1–6 行自适应、生成中插话排队、立即发送、停止
-- **工具**：可折叠工具卡片、审批弹窗、denied / failed 状态
+详细矩阵见 [`docs/PARITY.md`](docs/PARITY.md)。一句话版本：
+
+| 能力 | 手机版 |
+|---|---|
+| 账号登录、共用套餐 | ✅ OAuth + Project Token |
+| 流式对话、思考过程、多会话 | ✅ |
+| 读写文件 / shell / 搜索 / 抓网页 | ✅ 12 个工具 |
+| 计划清单（todo） | ✅ 计划卡实时打勾 |
+| 文件树与编辑器 | ✅ 新建 / 重命名 / 删除 / 预览图片 |
+| 终端 | ✅ 独立终端页，与 Agent 同一 PATH |
+| 项目规则 `AGENTS.md`、`.zcode/skills` | ✅ 每轮自动注入 |
+| 上下文压缩 | ✅ 自动 + `/compact`，摘要可见可清 |
+| 回合撤销 | ✅ 文件级快照 |
+| MCP / 子智能体 / 桌面级插件 | ⏳ 见路线图 |
+| Node / Python / git 运行时 | ⏳ 用扩展模块或自带静态二进制 |
+
+## 手机端交互
+
+- **输入**：`/` 弹命令面板，`@` 补全工作区文件并把内容随消息附上；图片会作为 image block 直传模型；
+- **发送**：生成中继续输入会排队（带附件），可「立即发送」或清空队列；空输入时按钮变停止；
+- **阅读**：倒序列表 + 吸底滚动、上滑自动脱离、右下角回到底部、长会话只渲染最近 30 条并可「加载更早」；
+- **消息**：复制 / 引用 / 编辑重发 / 重生成 / 删除，代码块带语言标签与复制，思考过程默认折叠；
+- **用量**：每条回答下方显示 in/out token，顶部显示当前上下文估算；上下文过长会自动折叠早期消息；
+- **流畅度**：流式文本按 16ms 合帧、完成后一次性走 Markdown、消息级缓存 + `RepaintBoundary`，滚动不抖。
+
+命令：`/new` `/clear` `/compact` `/undo` `/model` `/files` `/terminal` `/modules` `/export` `/settings` `/help`。
+
+## 扩展模块
+
+手机上没有 Node / Python / git，v3 的做法是**按需安装小工具**，全部落在工作区，不需要 root：
+
+| 内置 | 作用 |
+|---|---|
+| `tree` | 树形列目录 |
+| `peek` | 行数 / 大小 + 头尾预览，查日志 |
+| `findtext` | 递归搜索，自动跳过 `.git` |
+| `space` | 按体积列目录占用 |
+| `sysinfo` | 内核、运行时、磁盘摸底 |
+
+也可以从链接安装 `tar.gz` / `tgz` / `zip`：压缩包里的 `bin/` 目录会被注册进 PATH，Agent 和终端立刻可用；一键卸载。
+
+## 其他
+
+- **会话**：多会话、自动标题、置顶、归档、搜索、重命名、复制、删除
 - **外观**：5 套主色、亮 / 暗 / 跟随系统、4 档字号、中英双语
 - **端侧**：自适应图标、品牌闪屏、状态栏配色、横竖屏、键盘避让
 
@@ -73,6 +120,8 @@ flutter analyze && flutter test
 flutter build apk --release
 ```
 
+CI **只在打 tag 或手动触发时构建**（`workflow_dispatch`），日常 push 不会消耗 Actions 额度。
+
 签名：CI 从 Secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_STORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）还原 `android/key.properties`；缺 Secret 直接失败，构建后再校验证书指纹。固定密钥 SHA-256：
 
 ```
@@ -84,29 +133,38 @@ flutter build apk --release
 ```
 lib/
   services/account.dart     OAuth 登录、Project Token 签发与续期、Keystore 存储
-  agent/tools.dart          workspace 沙箱、6 个工具、危险命令判定
-  agent/agent_runner.dart   流式 tool_use 循环、审批、tool_result 回传
-  state/app_state.dart      会话、回合、队列、审批门
-  pages/login_page.dart     账号登录（无 API Key 输入）
-  widgets/tool_card.dart    工具调用卡片
+  services/modules.dart     扩展模块目录、下载解压、PATH 注入
+  agent/tools.dart          工作区沙箱、12 个工具、回合快照
+  agent/agent_runner.dart   流式 tool_use 循环、审批、usage、断线重试
+  agent/commands.dart       斜杠命令定义
+  state/app_state.dart      会话、回合、队列、压缩、撤销、附件
+  pages/files_page.dart     文件浏览 + 编辑器 + 图片预览
+  pages/terminal_page.dart  终端
+  pages/modules_page.dart   扩展模块管理
+  widgets/composer.dart     命令/文件补全、附件、引用、队列
+  widgets/tool_card.dart    工具卡与计划卡
 docs/RESEARCH.md            12 个同类项目的对比与取舍
+docs/PARITY.md              与桌面版 ZCode 的能力对照
+lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口（不参与 APK）
 ```
 
 ## 已验证
 
 - `flutter analyze` → **No issues found**
-- `flutter test` → **11/11 通过**，其中 `test/agent_test.dart` 用假模型服务端跑通完整闭环：
-  1. 模型发起 `bash` → App 真的执行 `echo … > proof.txt` → 磁盘上断言文件内容
-  2. 第二次请求里确实带上了 `tool_result` 与 `exit 0`
-  3. 拒绝审批的路径不落盘、状态为 `denied`
-  4. `../../../../etc/hostname` 被拦在工作区外
-- Release 构建由 GitHub Actions 产出并校验签名指纹
+- `flutter test` → **22/22 通过**，覆盖：
+  - 假模型服务端跑通完整闭环：`bash` 真执行、`tool_result` 回传、拒绝审批不落盘、越权路径被拦；
+  - `glob` / `grep` / `mkdir` / `move` / `delete` / `todo_write` 的行为；
+  - 回合快照：新建文件被删、改过的文件内容还原；
+  - 内置模块安装后脚本落盘、重启后仍注册、卸载清理；
+  - 输入框的 `/` 命令与 `@` 文件补全；
+  - 计划卡渲染。
 
 ## 路线图
 
-- [ ] 阶段二运行时：按 ABI 下载 Termux 运行时（node / python / git / proot），`bash` 切进容器（参考 DSH-Folk）
-- [ ] 图片附件与语音输入
-- [ ] 屏幕操作（无障碍/虚拟显示），参考 DSH-Folk 的 virtual display
+- [ ] 运行时模块：按 ABI 下载 node / python / git 的静态构建（目前用扩展模块补 shell 工具）
+- [ ] MCP（HTTP / stdio）与项目级工具注册
+- [ ] 语音输入与图片 OCR
+- [ ] 屏幕操作（无障碍 / 虚拟显示）
 
 ## 免责声明
 

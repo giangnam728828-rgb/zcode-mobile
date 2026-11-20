@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -15,7 +16,8 @@ class AgentRunner {
     required this.model,
     required this.toolbox,
     this.maxTokens = 8192,
-    this.maxSteps = 12,
+    this.maxSteps = 20,
+    this.temperature = 0.7,
   });
 
   final String baseUrl;
@@ -24,9 +26,12 @@ class AgentRunner {
   final ToolBox toolbox;
   final int maxTokens;
   final int maxSteps;
+  final double temperature;
 
   http.Client? _active;
   bool _cancelled = false;
+  int _lastInputTokens = 0;
+  int _lastOutputTokens = 0;
   bool get cancelled => _cancelled;
 
   void cancel() {
@@ -51,9 +56,12 @@ class AgentRunner {
     required void Function(ToolCall call) onToolStart,
     required void Function(ToolCall call) onToolUpdate,
     required Future<bool> Function(ToolCall call) approve,
+    void Function(int input, int output)? onUsage,
   }) async {
     for (int step = 0; step < maxSteps; step++) {
       if (_cancelled) return;
+      _lastInputTokens = 0;
+      _lastOutputTokens = 0;
 
       final _StepResult result = await _streamStep(
         wire: wire,
@@ -64,6 +72,9 @@ class AgentRunner {
         onToolUpdate: onToolUpdate,
       );
 
+      if (onUsage != null && (_lastInputTokens > 0 || _lastOutputTokens > 0)) {
+        onUsage(_lastInputTokens, _lastOutputTokens);
+      }
       if (_cancelled) return;
 
       final List<Map<String, dynamic>> content = <Map<String, dynamic>>[];
@@ -95,6 +106,7 @@ class AgentRunner {
           continue;
         }
         call.status = ToolStatus.running;
+        call.startedAt = DateTime.now();
         onToolUpdate(call);
         String output;
         try {
@@ -104,6 +116,7 @@ class AgentRunner {
           output = 'Tool failed: $e';
           call.status = ToolStatus.failed;
         }
+        call.endedAt = DateTime.now();
         call.output = output;
         onToolUpdate(call);
         results.add(_toolResult(call, output));
@@ -140,13 +153,41 @@ class AgentRunner {
     req.body = jsonEncode(<String, dynamic>{
       'model': model,
       'max_tokens': maxTokens,
+      'temperature': temperature,
       'stream': true,
       'system': systemPrompt,
       'tools': ToolBox.specs.map((ToolSpec t) => t.toJson()).toList(),
       'messages': wire,
     });
 
-    final http.StreamedResponse resp = await client.send(req);
+    http.StreamedResponse? resp;
+    int attempt = 0;
+    while (true) {
+      if (_cancelled) break;
+      try {
+        resp = await client.send(req);
+        break;
+      } catch (e) {
+        attempt++;
+        final bool transient = e is HttpException ||
+            e is SocketException ||
+            e is TimeoutException ||
+            e is http.ClientException;
+        if (_cancelled || !transient || attempt >= 3) {
+          _active = null;
+          throw AgentException(0, '网络连接失败：$e');
+        }
+        await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+      }
+    }
+    if (_cancelled) {
+      _active = null;
+      return _StepResult(text: '', calls: <ToolCall>[], stopReason: 'cancelled');
+    }
+    if (resp == null) {
+      _active = null;
+      throw AgentException(0, '网络连接失败，请检查网络后重试');
+    }
     if (resp.statusCode != 200) {
       final String body = await resp.stream.bytesToString();
       _active = null;
@@ -171,7 +212,16 @@ class AgentRunner {
         continue;
       }
       final String? type = ev['type'] as String?;
-      if (type == 'content_block_start') {
+      if (type == 'message_start') {
+        final Map<String, dynamic>? msg =
+            (ev['message'] as Map?)?.cast<String, dynamic>();
+        final Map<String, dynamic>? usage =
+            (msg?['usage'] as Map?)?.cast<String, dynamic>();
+        if (usage != null) {
+          _lastInputTokens = (usage['input_tokens'] as int?) ?? 0;
+          _lastOutputTokens = (usage['output_tokens'] as int?) ?? 0;
+        }
+      } else if (type == 'content_block_start') {
         final int index = (ev['index'] as int?) ?? 0;
         final Map<String, dynamic>? block =
             (ev['content_block'] as Map?)?.cast<String, dynamic>();
@@ -221,6 +271,12 @@ class AgentRunner {
             (ev['delta'] as Map?)?.cast<String, dynamic>();
         final String? stop = delta?['stop_reason'] as String?;
         if (stop != null) stopReason = stop;
+        final Map<String, dynamic>? usage =
+            (ev['usage'] as Map?)?.cast<String, dynamic>();
+        if (usage != null) {
+          final int out = (usage['output_tokens'] as int?) ?? 0;
+          if (out > 0) _lastOutputTokens = out;
+        }
       } else if (type == 'error') {
         final Map<String, dynamic>? err =
             (ev['error'] as Map?)?.cast<String, dynamic>();
@@ -258,6 +314,9 @@ class AgentException implements Exception {
     }
     if (statusCode == 429) {
       return '额度不足或请求过于频繁（429）';
+    }
+    if (statusCode == 0) {
+      return body.isEmpty ? '网络请求失败，请重试' : body;
     }
     final String snippet = body.length > 240 ? body.substring(0, 240) : body;
     return '请求失败（$statusCode）：$snippet';

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +9,9 @@ import '../l10n/strings.dart';
 import '../models/app_config.dart';
 import '../services/account.dart';
 import '../state/app_state.dart';
+import 'files_page.dart';
+import 'modules_page.dart';
+import 'terminal_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -64,6 +69,25 @@ class _SettingsPageState extends State<SettingsPage> {
     String two(int v) => v.toString().padLeft(2, '0');
     final String plan = session.planLabel ?? session.accountRegion.label;
     return '$plan · 凭据 ${two(t.hour)}:${two(t.minute)} 过期';
+  }
+
+  Future<void> _openAgents(AppState state, S s) async {
+    final tools = state.tools;
+    if (tools == null) return;
+    final File file = File(tools.resolvePath('AGENTS.md'));
+    if (!await file.exists()) {
+      await file.writeAsString(AppState.agentsTemplate);
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => FileEditorPage(
+        path: file.path,
+        relative: 'AGENTS.md',
+      ),
+    ));
+    if (!mounted) return;
+    state.refreshFileIndex();
+    setState(() {});
   }
 
   Future<void> _confirmSignOut(AppState state) async {
@@ -243,6 +267,149 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ]),
           const SizedBox(height: 18),
+          _section(s.isEnglish ? 'Agent' : '智能体', cs),
+          _card(<Widget>[
+            _label(s.isEnglish ? 'Tool approval' : '工具审批', cs),
+            const SizedBox(height: 6),
+            _segmented(
+              options: <String>[
+                s.isEnglish ? 'Risky only' : '仅危险操作',
+                s.isEnglish ? 'Ask all' : '每次询问',
+                s.isEnglish ? 'Auto' : '自动执行',
+              ],
+              values: <String>['risky', 'ask', 'auto'],
+              selected: c.approvalMode,
+              cs: cs,
+              onPick: (String v) => state.updatePrefs(approvalMode: v),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              c.approvalMode == 'auto'
+                  ? (s.isEnglish
+                      ? 'The agent can run any tool without asking. Use it for trusted tasks.'
+                      : '智能体可以不经确认执行任何工具，请只在信任的任务里使用。')
+                  : c.approvalMode == 'ask'
+                      ? (s.isEnglish
+                          ? 'Every tool call waits for your tap.'
+                          : '每一次工具调用都会等你确认。')
+                      : (s.isEnglish
+                          ? 'Only deletes, moves and destructive shell commands ask.'
+                          : '只有删除、移动和破坏性 shell 命令会询问。'),
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.5,
+                color: cs.onSurface.withOpacity(0.38),
+              ),
+            ),
+            const _Gap(),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _label(
+                    '${s.isEnglish ? 'Temperature' : '温度'}  '
+                    '${c.temperature.toStringAsFixed(1)}',
+                    cs,
+                  ),
+                ),
+                Text(
+                  c.temperature <= 0.35
+                      ? (s.isEnglish ? 'precise' : '严谨')
+                      : c.temperature >= 0.85
+                          ? (s.isEnglish ? 'creative' : '发散')
+                          : (s.isEnglish ? 'balanced' : '均衡'),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: cs.onSurface.withOpacity(0.35),
+                  ),
+                ),
+              ],
+            ),
+            Slider(
+              value: c.temperature.clamp(0.0, 1.0),
+              min: 0,
+              max: 1,
+              divisions: 20,
+              onChanged: (double v) =>
+                  state.updatePrefs(temperature: (v * 10).round() / 10),
+            ),
+            const _Gap(),
+            _switchRow(
+              icon: Icons.compress_rounded,
+              label: s.isEnglish ? 'Auto-compact context' : '自动压缩上下文',
+              hint: s.isEnglish
+                  ? 'Fold older turns into a summary before the window fills up.'
+                  : '上下文变长前，自动把早期对话折叠成摘要。',
+              value: c.autoCompact,
+              onChanged: (bool v) => state.updatePrefs(autoCompact: v),
+              cs: cs,
+            ),
+          ]),
+          const SizedBox(height: 18),
+          _section(s.isEnglish ? 'Workspace' : '工作区', cs),
+          _card(<Widget>[
+            _navRow(
+              icon: Icons.folder_open_rounded,
+              label: s.isEnglish ? 'Files' : '文件管理',
+              hint: s.isEnglish
+                  ? 'Browse, edit and reference workspace files'
+                  : '浏览、编辑文件，或插入 @ 引用',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const FilesPage()),
+              ),
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            _navRow(
+              icon: Icons.terminal_rounded,
+              label: s.isEnglish ? 'Terminal' : '终端',
+              hint: s.isEnglish
+                  ? 'Run shell commands with the agent\'s PATH'
+                  : '用与智能体相同的 PATH 执行命令',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const TerminalPage()),
+              ),
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            _navRow(
+              icon: Icons.extension_outlined,
+              label: s.isEnglish ? 'Modules' : '扩展模块',
+              hint: s.isEnglish
+                  ? 'Install tree, peek and other CLI helpers'
+                  : '安装 tree、peek 等命令行小工具',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const ModulesPage()),
+              ),
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            _navRow(
+              icon: Icons.rule_rounded,
+              label: s.isEnglish ? 'Project rules' : '项目规则 AGENTS.md',
+              hint: state.tools != null &&
+                      File(state.tools!.resolvePath('AGENTS.md')).existsSync()
+                  ? (s.isEnglish
+                      ? 'Loaded into every conversation'
+                      : '已在每次对话中自动加载')
+                  : (s.isEnglish
+                      ? 'Create one to teach the agent this project'
+                      : '创建后智能体会自动遵守这份说明'),
+              onTap: () => _openAgents(state, s),
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            Text(
+              state.workspacePath.isEmpty
+                  ? '—'
+                  : state.workspacePath,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontFamily: 'monospace',
+                color: cs.onSurface.withOpacity(0.38),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 18),
           _section(s.appearance, cs),
           _card(<Widget>[
             _label(s.theme, cs),
@@ -375,7 +542,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   onPressed: () => _save(state),
                   style: ElevatedButton.styleFrom(
                     primary: cs.primary,
-                    onPrimary: Colors.white,
+                    onPrimary: cs.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(13),
@@ -399,6 +566,89 @@ class _SettingsPageState extends State<SettingsPage> {
     if (scale <= 1.02) return 'M';
     if (scale <= 1.12) return 'L';
     return 'XL';
+  }
+
+  Widget _navRow({
+    required IconData icon,
+    required String label,
+    required String hint,
+    required VoidCallback onTap,
+    required ColorScheme cs,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 18, color: cs.primary.withOpacity(0.8)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(label, style: const TextStyle(fontSize: 13.5)),
+                  const SizedBox(height: 2),
+                  Text(
+                    hint,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.45,
+                      color: cs.onSurface.withOpacity(0.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 17, color: cs.onSurface.withOpacity(0.3)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _switchRow({
+    required IconData icon,
+    required String label,
+    required String hint,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required ColorScheme cs,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 18, color: cs.primary.withOpacity(0.8)),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(label, style: const TextStyle(fontSize: 13.5)),
+              const SizedBox(height: 2),
+              Text(
+                hint,
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.45,
+                  color: cs.onSurface.withOpacity(0.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ],
+    );
   }
 
   Widget _section(String title, ColorScheme cs) {

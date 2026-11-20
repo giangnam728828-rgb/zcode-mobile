@@ -56,6 +56,15 @@ class AppConfig {
   /// 'ask' asks for every tool, 'auto' lets the agent run unattended.
   final String approvalMode;
 
+  /// Sampling temperature sent with every turn.
+  final double temperature;
+
+  /// Fold old turns into a summary before the context gets too long.
+  final bool autoCompact;
+
+  /// Hard cap on tool round-trips inside one turn.
+  final int maxSteps;
+
   const AppConfig({
     required this.provider,
     required this.baseUrl,
@@ -68,6 +77,9 @@ class AppConfig {
     this.fontScale = 1.0,
     this.language = 'zh',
     this.approvalMode = 'risky',
+    this.temperature = 0.7,
+    this.autoCompact = true,
+    this.maxSteps = 20,
   });
 
   static const String defaultSystemPrompt =
@@ -111,6 +123,9 @@ class AppConfig {
     double? fontScale,
     String? language,
     String? approvalMode,
+    double? temperature,
+    bool? autoCompact,
+    int? maxSteps,
   }) {
     return AppConfig(
       provider: provider ?? this.provider,
@@ -124,6 +139,9 @@ class AppConfig {
       fontScale: fontScale ?? this.fontScale,
       language: language ?? this.language,
       approvalMode: approvalMode ?? this.approvalMode,
+      temperature: temperature ?? this.temperature,
+      autoCompact: autoCompact ?? this.autoCompact,
+      maxSteps: maxSteps ?? this.maxSteps,
     );
   }
 
@@ -139,12 +157,18 @@ class AppConfig {
         'fontScale': fontScale,
         'language': language,
         'approvalMode': approvalMode,
+        'temperature': temperature,
+        'autoCompact': autoCompact,
+        'maxSteps': maxSteps,
       };
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
     double fs = 1.0;
     final Object? rawScale = json['fontScale'];
     if (rawScale is num) fs = rawScale.toDouble();
+    double temp = 0.7;
+    final Object? rawTemp = json['temperature'];
+    if (rawTemp is num) temp = rawTemp.toDouble();
     return AppConfig(
       provider: (json['provider'] as String?) ?? 'bigmodel',
       baseUrl: (json['baseUrl'] as String?) ?? Endpoints.bigmodel,
@@ -157,6 +181,9 @@ class AppConfig {
       fontScale: fs.clamp(0.85, 1.3),
       language: (json['language'] as String?) ?? 'zh',
       approvalMode: (json['approvalMode'] as String?) ?? 'risky',
+      temperature: temp.clamp(0.0, 1.0),
+      autoCompact: (json['autoCompact'] as bool?) ?? true,
+      maxSteps: ((json['maxSteps'] as int?) ?? 20).clamp(1, 60),
     );
   }
 

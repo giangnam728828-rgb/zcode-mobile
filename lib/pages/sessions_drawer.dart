@@ -405,6 +405,10 @@ class _SessionsPanelState extends State<SessionsPanel> {
             final String? name = await _askName(c);
             if (name != null) state.renameConversation(c.id, name);
             break;
+          case 'duplicate':
+            state.duplicateConversation(c.id);
+            widget.onPicked?.call();
+            break;
           case 'delete':
             final bool? yes = await _confirmDelete();
             if (yes == true) state.deleteConversation(c.id);
@@ -415,6 +419,11 @@ class _SessionsPanelState extends State<SessionsPanel> {
         PopupMenuItem<String>(
           value: 'rename',
           child: _menuRow(Icons.edit_outlined, widget.s.rename),
+        ),
+        PopupMenuItem<String>(
+          value: 'duplicate',
+          child: _menuRow(Icons.copy_all_outlined,
+              widget.s.isEnglish ? 'Duplicate' : '复制会话'),
         ),
         PopupMenuItem<String>(
           value: 'pin',

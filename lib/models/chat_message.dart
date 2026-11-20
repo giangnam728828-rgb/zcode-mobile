@@ -1,4 +1,5 @@
 import '../agent/tools.dart';
+import 'attachment.dart';
 
 enum Sender { user, assistant, system }
 
@@ -14,8 +15,13 @@ class ChatMessage {
     this.streaming = false,
     this.error,
     this.stopped = false,
+    this.inputTokens = 0,
+    this.outputTokens = 0,
+    this.compacted = false,
     List<ToolCall>? tools,
+    List<Attachment>? attachments,
   })  : tools = tools ?? <ToolCall>[],
+        attachments = attachments ?? <Attachment>[],
         createdAt = createdAt ?? DateTime.now();
 
   final String id;
@@ -29,12 +35,32 @@ class ChatMessage {
   String? error;
   bool stopped;
 
+  /// Usage reported by the API for this turn.
+  int inputTokens;
+  int outputTokens;
+
+  /// Older turns folded into the conversation summary are skipped on replay.
+  bool compacted;
+
   /// Tool invocations that belong to this assistant turn.
   final List<ToolCall> tools;
+
+  /// Files the user attached to this message.
+  final List<Attachment> attachments;
 
   bool get isUser => role == Sender.user;
   bool get isEmpty =>
       text.trim().isEmpty && thinking.trim().isEmpty && tools.isEmpty;
+
+  bool get hasImageAttachment =>
+      attachments.any((Attachment a) => a.isImage);
+
+  String get tokenLabel {
+    if (inputTokens <= 0 && outputTokens <= 0) return '';
+    String fmt(int n) =>
+        n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
+    return '${fmt(inputTokens)} in · ${fmt(outputTokens)} out';
+  }
 
   ChatMessage copy() => ChatMessage(
         id: id,
@@ -45,7 +71,11 @@ class ChatMessage {
         streaming: streaming,
         error: error,
         stopped: stopped,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens,
+        compacted: compacted,
         tools: tools,
+        attachments: attachments,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -55,7 +85,13 @@ class ChatMessage {
         if (thinking.isNotEmpty) 'thinking': thinking,
         'createdAt': createdAt.toIso8601String(),
         if (stopped) 'stopped': true,
-        if (tools.isNotEmpty) 'tools': tools.map((ToolCall t) => t.toJson()).toList(),
+        if (inputTokens > 0) 'in': inputTokens,
+        if (outputTokens > 0) 'out': outputTokens,
+        if (compacted) 'compacted': true,
+        if (tools.isNotEmpty)
+          'tools': tools.map((ToolCall t) => t.toJson()).toList(),
+        if (attachments.isNotEmpty)
+          'attachments': attachments.map((Attachment a) => a.toJson()).toList(),
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -66,13 +102,19 @@ class ChatMessage {
       role: Sender.values[roleIdx.clamp(0, Sender.values.length - 1)],
       text: (json['text'] as String?) ?? '',
       thinking: (json['thinking'] as String?) ?? '',
-      createdAt:
-          DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
-              DateTime.now(),
+      createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
+          DateTime.now(),
       stopped: (json['stopped'] as bool?) ?? false,
+      inputTokens: (json['in'] as int?) ?? 0,
+      outputTokens: (json['out'] as int?) ?? 0,
+      compacted: (json['compacted'] as bool?) ?? false,
       tools: ((json['tools'] as List?) ?? <dynamic>[])
           .whereType<Map>()
           .map((Map m) => ToolCall.fromJson(m.cast<String, dynamic>()))
+          .toList(),
+      attachments: ((json['attachments'] as List?) ?? <dynamic>[])
+          .whereType<Map>()
+          .map((Map m) => Attachment.fromJson(m.cast<String, dynamic>()))
           .toList(),
     );
   }
