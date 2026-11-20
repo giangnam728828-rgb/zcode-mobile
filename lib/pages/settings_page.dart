@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../app_info.dart';
 import '../l10n/strings.dart';
 import '../models/app_config.dart';
+import '../services/account.dart';
 import '../state/app_state.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -20,7 +21,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _model;
   late final TextEditingController _system;
   late final TextEditingController _maxTokens;
-  bool _obscure = true;
   bool _dirty = false;
 
   @override
@@ -55,6 +55,36 @@ class _SettingsPageState extends State<SettingsPage> {
     _system.dispose();
     _maxTokens.dispose();
     super.dispose();
+  }
+
+  String _sessionLine(AppState state) {
+    final AccountSession? session = state.session;
+    if (session == null) return '未登录';
+    final DateTime t = session.expiresAt.toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final String plan = session.planLabel ?? session.accountRegion.label;
+    return '$plan · 凭据 ${two(t.hour)}:${two(t.minute)} 过期';
+  }
+
+  Future<void> _confirmSignOut(AppState state) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        content: const Text('退出登录后需要重新授权才能继续使用。',
+            style: TextStyle(fontSize: 14.5, height: 1.5)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await state.signOut();
   }
 
   Future<void> _save(AppState state) async {
@@ -120,22 +150,49 @@ class _SettingsPageState extends State<SettingsPage> {
               decoration: const InputDecoration(isDense: true),
             ),
             const _Gap(),
-            _label(s.apiKey, cs),
-            TextField(
-              controller: _key,
-              obscureText: _obscure,
-              style: const TextStyle(fontSize: 13.5, fontFamily: 'monospace'),
-              decoration: InputDecoration(
-                isDense: true,
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 18,
+            _label(s.account, cs),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+              decoration: BoxDecoration(
+                color: cs.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.account_circle_outlined, size: 20, color: cs.primary),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          state.session?.displayName ??
+                              (state.session?.region == 'zai'
+                                  ? 'Z.ai account'
+                                  : 'BigModel account'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _sessionLine(state),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurface.withOpacity(0.45),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                ),
+                  TextButton(
+                    onPressed: () => _confirmSignOut(state),
+                    child: Text(s.isEnglish ? 'Sign out' : '退出登录'),
+                  ),
+                ],
               ),
             ),
             const _Gap(),

@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../models/app_config.dart';
+import '../agent/tools.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../state/app_state.dart';
 import '../widgets/composer.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/tool_card.dart';
 import 'settings_page.dart';
 
 /// The conversation view: header, transcript, composer.
@@ -82,6 +84,12 @@ class _ChatPageState extends State<ChatPage> {
 
     final List<ChatMessage> msgs = convo?.messages ?? <ChatMessage>[];
 
+    if (state.pendingApproval != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _askApproval(state, s);
+      });
+    }
+
     if (_stick) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToBottom();
@@ -133,6 +141,18 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Widget _bubble(AppState state, ChatMessage m, bool last, S s) {
+    final Widget bubble = _bubbleBody(state, m, last, s);
+    if (m.tools.isEmpty) return bubble;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        bubble,
+        for (final ToolCall t in m.tools) ToolCard(call: t),
+      ],
+    );
+  }
+
+  Widget _bubbleBody(AppState state, ChatMessage m, bool last, S s) {
     if (m.streaming) {
       return MessageBubble(
         message: m,
@@ -157,6 +177,90 @@ class _ChatPageState extends State<ChatPage> {
         onDelete: () => _confirmDeleteMessage(state, m, s),
       ),
     );
+  }
+
+  bool _asking = false;
+
+  /// Blocks the agent until the user allows or denies a risky tool call.
+  Future<void> _askApproval(AppState state, S s) async {
+    if (_asking) return;
+    final ToolCall? call = state.pendingApproval;
+    if (call == null || !mounted) return;
+    _asking = true;
+    final bool en = s.isEnglish;
+    final String detail = call.isShell
+        ? '${call.input['command'] ?? ''}'
+        : call.name == 'write_file'
+            ? '${call.input['path'] ?? ''}\n+ ${('${call.input['content'] ?? ''}').split('\n').length} lines'
+            : '${call.input['path'] ?? call.title}';
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(
+          en ? 'Run this action?' : '允许执行这个操作？',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    call.isShell ? 'bash' : call.name,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(ctx).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 220),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F1319),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                child: Text(
+                  detail,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.45,
+                    fontFamily: 'monospace',
+                    color: Color(0xFFD6DDE6),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(en ? 'Deny' : '拒绝'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(en ? 'Allow' : '允许'),
+          ),
+        ],
+      ),
+    );
+    state.resolveApproval(ok == true);
+    _asking = false;
   }
 
   Widget _header(AppState state, ColorScheme cs, S s, Conversation? convo) {

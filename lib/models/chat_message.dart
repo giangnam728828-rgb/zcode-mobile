@@ -1,3 +1,5 @@
+import '../agent/tools.dart';
+
 enum Sender { user, assistant, system }
 
 /// One bubble in a conversation. Mutable on purpose: streaming appends
@@ -12,7 +14,9 @@ class ChatMessage {
     this.streaming = false,
     this.error,
     this.stopped = false,
-  }) : createdAt = createdAt ?? DateTime.now();
+    List<ToolCall>? tools,
+  })  : tools = tools ?? <ToolCall>[],
+        createdAt = createdAt ?? DateTime.now();
 
   final String id;
   final Sender role;
@@ -25,8 +29,12 @@ class ChatMessage {
   String? error;
   bool stopped;
 
+  /// Tool invocations that belong to this assistant turn.
+  final List<ToolCall> tools;
+
   bool get isUser => role == Sender.user;
-  bool get isEmpty => text.trim().isEmpty && thinking.trim().isEmpty;
+  bool get isEmpty =>
+      text.trim().isEmpty && thinking.trim().isEmpty && tools.isEmpty;
 
   ChatMessage copy() => ChatMessage(
         id: id,
@@ -37,6 +45,7 @@ class ChatMessage {
         streaming: streaming,
         error: error,
         stopped: stopped,
+        tools: tools,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -46,6 +55,7 @@ class ChatMessage {
         if (thinking.isNotEmpty) 'thinking': thinking,
         'createdAt': createdAt.toIso8601String(),
         if (stopped) 'stopped': true,
+        if (tools.isNotEmpty) 'tools': tools.map((ToolCall t) => t.toJson()).toList(),
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -60,6 +70,10 @@ class ChatMessage {
           DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
               DateTime.now(),
       stopped: (json['stopped'] as bool?) ?? false,
+      tools: ((json['tools'] as List?) ?? <dynamic>[])
+          .whereType<Map>()
+          .map((Map m) => ToolCall.fromJson(m.cast<String, dynamic>()))
+          .toList(),
     );
   }
 }

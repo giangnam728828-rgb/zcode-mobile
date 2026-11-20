@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'l10n/strings.dart';
 import 'models/app_config.dart';
 import 'pages/home_shell.dart';
-import 'pages/setup_page.dart';
+import 'pages/login_page.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
@@ -60,9 +59,9 @@ class _Root extends StatelessWidget {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    final bool configured = state.config != null && state.config!.isConfigured;
-    if (!configured) {
-      return SetupPage(s: S.of(state.config?.language));
+    final bool signedIn = state.session != null;
+    if (!signedIn) {
+      return const LoginPage();
     }
     return const HomeShell();
   }

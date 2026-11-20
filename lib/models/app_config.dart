@@ -52,6 +52,10 @@ class AppConfig {
   final double fontScale; // 0.9 / 1.0 / 1.1 / 1.2
   final String language; // 'zh' | 'en'
 
+  /// Tool approval policy: 'risky' asks only for destructive shell/file writes,
+  /// 'ask' asks for every tool, 'auto' lets the agent run unattended.
+  final String approvalMode;
+
   const AppConfig({
     required this.provider,
     required this.baseUrl,
@@ -63,6 +67,7 @@ class AppConfig {
     this.accentId = 'indigo',
     this.fontScale = 1.0,
     this.language = 'zh',
+    this.approvalMode = 'risky',
   });
 
   static const String defaultSystemPrompt =
@@ -79,7 +84,7 @@ class AppConfig {
     maxTokens: 8192,
   );
 
-  bool get isConfigured => apiKey.trim().isNotEmpty && model.trim().isNotEmpty;
+  bool get isConfigured => model.trim().isNotEmpty && baseUrl.trim().isNotEmpty;
 
   Accent get accent => Accent.byId(accentId);
 
@@ -105,6 +110,7 @@ class AppConfig {
     String? accentId,
     double? fontScale,
     String? language,
+    String? approvalMode,
   }) {
     return AppConfig(
       provider: provider ?? this.provider,
@@ -117,6 +123,7 @@ class AppConfig {
       accentId: accentId ?? this.accentId,
       fontScale: fontScale ?? this.fontScale,
       language: language ?? this.language,
+      approvalMode: approvalMode ?? this.approvalMode,
     );
   }
 
@@ -131,6 +138,7 @@ class AppConfig {
         'accentId': accentId,
         'fontScale': fontScale,
         'language': language,
+        'approvalMode': approvalMode,
       };
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
@@ -148,6 +156,7 @@ class AppConfig {
       accentId: (json['accentId'] as String?) ?? 'indigo',
       fontScale: fs.clamp(0.85, 1.3),
       language: (json['language'] as String?) ?? 'zh',
+      approvalMode: (json['approvalMode'] as String?) ?? 'risky',
     );
   }
 

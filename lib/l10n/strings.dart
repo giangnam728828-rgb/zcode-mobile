@@ -1,6 +1,9 @@
 /// Minimal two-language string table. Chosen over generated l10n to keep the
 /// build free of codegen while still covering every visible label.
 class S {
+  /// True for the English table; lets a few screens branch without a key per string.
+  bool get isEnglish => this == en;
+
   const S({
     required this.appName,
     required this.tagline,

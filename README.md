@@ -1,57 +1,67 @@
 # ZCode Mobile
 
-**装在手机里的 ZCode** —— 直连 GLM Coding Plan 的原生 Android 客户端，不需要电脑开机、不需要扫码、不依赖桌面端，和桌面端共用同一份 Token 与额度。
+**装在手机里的 ZCode 智能体** —— 用平台账号登录（不填 API Key），登录后 Agent 能在手机本地**真跑 shell 命令、真改文件**，和桌面端共用同一份套餐额度。
 
 <p align="center">
-  <img src="docs/setup.png" width="200" alt="配置页">
-  <img src="docs/chat.png" width="200" alt="对话">
-  <img src="docs/drawer.png" width="200" alt="会话抽屉">
-  <img src="docs/settings.png" width="200" alt="设置">
+  <img src="docs/chat.png" width="190" alt="对话">
+  <img src="docs/drawer.png" width="190" alt="会话">
+  <img src="docs/queue.png" width="190" alt="工具调用">
 </p>
 
-> 社区非官方客户端，与智谱 / Z.ai 无隶属关系。仅直连官方 API，不代理、不上传任何中转数据。
+> 社区非官方客户端，与智谱 / Z.ai 无隶属关系。Agent 只在应用私有工作区内执行，不碰系统其它数据。
 
 ## 安装
 
 1. 到 [Releases](../../releases) 下载最新 `zcode-mobile.apk`
 2. 允许「安装未知来源应用」后安装（Android 5.0+）
-3. 首次打开填入 GLM Coding Plan 的 API Key，选模型即可开始
+3. 打开后点「使用 BigModel 账号登录」或「使用 Z.ai 账号登录」，在浏览器里完成授权即可
 
-后续版本可直接覆盖安装（同一签名），聊天记录与设置保留。
+新版本可直接覆盖安装（固定签名），会话与设置保留。
 
-## 为什么是这种形态
+## 登录：账号授权，不贴 Key
 
-参考了 [DSH Go](https://github.com/ccch1mneyyy/dsh-Go)（DeepSeek Harness 的手机端）的产品结构，取了它对移动端最关键的三件事：
+流程与 ZCode 官方开源 CLI 一致（实现见 `lib/services/account.dart`）：
 
-| 借鉴点 | 在 ZCode Mobile 的落地 |
+```
+浏览器授权页  →  127.0.0.1 回跳带 authCode  →  POST zcode.z.ai/api/v1/oauth/token
+             →  登录 JWT / BigModel access_token
+             →  customerInfo → 专用 Key(zcode-api-key) → 换短期 Project Token
+             →  模型请求携带 Project Token（消耗你账号里的套餐）
+```
+
+- **密码只在浏览器里输入**，App 只保存令牌；
+- 令牌存在 **Android Keystore**（`flutter_secure_storage`），不落明文、不进日志；
+- Project Token 过期前自动续签，长会话不会中途断；
+- 回调走本机 `127.0.0.1` 随机端口，不需要扫码、不需要填远程链接、不依赖电脑开机。
+
+## Agent：真的会在手机上干活
+
+内置工具循环（Anthropic 兼容的 `tool_use` / `tool_result`）：
+
+| 工具 | 能力 |
 |---|---|
-| **原生 UI** | Flutter 直接渲染，不是 WebView 套壳；滑动、键盘、返回手势都是系统级体验 |
-| **单键输入、生成中可插话** | 输入框只有一颗键：空输入时是停止，有输入时是发送；生成中发送进入**队列**，回合结束自动续发，也可「立即发送」打断 |
-| **会话抽屉 + 自适应外壳** | 手机是左滑抽屉，平板/横屏是常驻侧栏 + 居中内容，断点 780dp |
+| `bash` | `sh` + Android toybox：ls / cat / grep / sed / find / curl…，可跑脚本 |
+| `read_file` | 按行读取，带 offset / limit |
+| `write_file` | 新建或覆盖（自动建目录） |
+| `edit_file` | 精确替换一段内容，重复匹配会拒绝 |
+| `list_dir` | 列目录 |
+| `grep` | 正则搜索，支持 glob |
 
-**没有照搬的地方**：DSH Go 在手机里内置了 PRoot + Ubuntu + Node 去跑完整引擎（约 1 GB，仅 Android）。ZCode Mobile 走轻客户端路线，直连 Anthropic 兼容端点，包体 20 MB 左右。代价是本地工具链（读写文件、跑命令）不在本期范围内，见「路线图」。
+安全边界：
 
-## 共享 Token
-
-这是本项目的核心目标：**手机上不用重新登录、不用重复订阅，和桌面端吃同一份额度。**
-
-1. **直接填 Key** —— GLM Coding Plan 的 API Key 本身就是通用 Key，手机填进去即可直连。桌面端 `~/.zcode/v2/config.json` 里的 `provider["builtin:bigmodel-coding-plan"].options.apiKey` 就是它。
-2. **配置串导入** —— 设置 → 数据 → 导出配置，得到一段 `zcm://...`；另一台手机粘贴导入，端点、模型、Key 一次带过去。外观设置不会被覆盖。
-
-```
-设置 → 数据 → 导出配置  →  zcm://eyJ2IjoxLCJwcm92...
-另一台手机 → 导入配置   →  粘贴 → 完成
-```
+- 工作区固定在应用私有目录（`/data/data/ai.zcode.zcode_mobile/files/workspace`），`..` 越权路径会被规范化后拒绝（有测试覆盖）；
+- **审批三档**：`risky`（默认，`rm`/`mv`/重定向/写文件才问）、`ask`（每个工具都问）、`auto`（全放开）；
+- 审批弹窗里能看到**完整命令**，拒绝后模型会收到 denied，不会偷偷执行；
+- 每次调用在对话里是一张可展开的卡片：命令 + 输出 + 退出码。
 
 ## 功能
 
-- **会话管理**：多会话、自动标题、置顶、归档、搜索、重命名、删除；按今天 / 昨天 / 最近 7 天 / 更早分组
-- **对话**：SSE 流式、Markdown、代码卡片（语言标签 + 一键复制 + 横向滚动）、表格、引用、思考过程折叠
-- **消息操作**：复制、重新生成、编辑并重发、删除单条
-- **输入**：1–6 行自适应、生成中插话排队、立即发送、清空队列
+- **会话**：多会话、自动标题、置顶、归档、搜索、重命名、删除
+- **对话**：SSE 流式、Markdown、代码卡片、思考折叠、复制 / 重生成 / 编辑重发
+- **输入**：1–6 行自适应、生成中插话排队、立即发送、停止
+- **工具**：可折叠工具卡片、审批弹窗、denied / failed 状态
 - **外观**：5 套主色、亮 / 暗 / 跟随系统、4 档字号、中英双语
-- **数据**：全部本地存储；导出 Markdown 转录、导出 / 导入配置、一键清空
-- **端侧细节**：自适应图标、品牌闪屏、状态栏/导航栏配色随主题、system 深色模式、横竖屏、键盘避让
+- **端侧**：自适应图标、品牌闪屏、状态栏配色、横竖屏、键盘避让
 
 ## 自己构建
 
@@ -61,67 +71,48 @@
 flutter pub get
 flutter analyze && flutter test
 flutter build apk --release
-# 产物：build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### 签名
+签名：CI 从 Secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_STORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）还原 `android/key.properties`；缺 Secret 直接失败，构建后再校验证书指纹。固定密钥 SHA-256：
 
-所有正式包都用**同一枚固定 release 密钥**签名，因此新版本可以直接覆盖安装，不需要卸载。
-
-| 项 | 值 |
-|---|---|
-| alias | `zcode` |
-| 算法 | RSA 2048 / SHA384withRSA，有效期至 2056 |
-| 证书 SHA-256 | `32:0B:A9:4F:FD:6A:CB:DD:2B:C2:1A:85:2C:4B:69:C0:F3:67:1B:8C:35:BE:27:E2:B9:A8:0C:71:53:C4:9F:4A` |
-
-- **CI**：从 Secrets 还原 keystore 到 `android/app/zcode-release.jks` 并生成 `android/key.properties`；Secret 缺失时**直接失败**，不会退回 debug 签名；构建后再校验 APK 证书指纹，不一致也失败。
-- **本地**：把 `zcode-release.jks` 放到 `android/app/`，新建 `android/key.properties`：
-
-```properties
-storeFile=zcode-release.jks
-storePassword=你的口令
-keyAlias=zcode
-keyPassword=你的口令
 ```
-
-缺少 `key.properties` 时，release 构建会报错并提示（debug 构建不受影响）。`key.properties` 与 `*.jks` 已在 `.gitignore` 中，不会进版本库。
-
-推送到 `main` 或打 `v*` 标签会触发 `.github/workflows/build.yml`：`analyze + test` → 构建 release APK → 上传 artifact；打标签时还会自动创建 Release 并附上 APK。
+32:0B:A9:4F:FD:6A:CB:DD:2B:C2:1A:85:2C:4B:69:C0:F3:67:1B:8C:35:BE:27:E2:B9:A8:0C:71:53:C4:9F:4A
+```
 
 ## 目录
 
 ```
 lib/
-  main.dart                 应用入口、主题装配、系统栏配色、首次配置路由
-  models/                   AppConfig / Conversation / ChatMessage
-  services/                 GLM 流式客户端、SharedPreferences 存储
-  state/app_state.dart      会话、流式回合、队列、持久化
-  theme/app_theme.dart      亮/暗主题、5 套主色、字号缩放
-  l10n/strings.dart         中英双语文案表
-  pages/                    setup / home_shell / chat / sessions_drawer / settings
-  widgets/                  composer / message_bubble / markdown_text
-test/                       SSE 解析、思考流、错误处理、配置串、Markdown 导出、UI 冒烟
+  services/account.dart     OAuth 登录、Project Token 签发与续期、Keystore 存储
+  agent/tools.dart          workspace 沙箱、6 个工具、危险命令判定
+  agent/agent_runner.dart   流式 tool_use 循环、审批、tool_result 回传
+  state/app_state.dart      会话、回合、队列、审批门
+  pages/login_page.dart     账号登录（无 API Key 输入）
+  widgets/tool_card.dart    工具调用卡片
+docs/RESEARCH.md            12 个同类项目的对比与取舍
 ```
 
 ## 已验证
 
 - `flutter analyze` → **No issues found**
-- `flutter test` → **7/7 通过**（SSE 文本与思维流分离、401 处理、`zcm://` 往返、会话导出、配置页中英渲染）
-- 真实浏览器 390×844 / 1180×820 两档视口截图核对：无溢出、无裁切
-- 用本地 mock SSE 服务跑通完整链路：发送 → 流式 → 插话排队 → 回合结束自动续发 → Markdown 渲染
+- `flutter test` → **11/11 通过**，其中 `test/agent_test.dart` 用假模型服务端跑通完整闭环：
+  1. 模型发起 `bash` → App 真的执行 `echo … > proof.txt` → 磁盘上断言文件内容
+  2. 第二次请求里确实带上了 `tool_result` 与 `exit 0`
+  3. 拒绝审批的路径不落盘、状态为 `denied`
+  4. `../../../../etc/hostname` 被拦在工作区外
+- Release 构建由 GitHub Actions 产出并校验签名指纹
 
 ## 路线图
 
-- [ ] 图片附件与从相册粘贴
-- [ ] 语音输入
-- [ ] 多模型供应商（OpenAI 兼容端点）
-- [ ] 阶段二：内置工具链（读写文件、执行命令），对齐 ZCode 的 Agent 能力，需要内置 Node 运行时
+- [ ] 阶段二运行时：按 ABI 下载 Termux 运行时（node / python / git / proot），`bash` 切进容器（参考 DSH-Folk）
+- [ ] 图片附件与语音输入
+- [ ] 屏幕操作（无障碍/虚拟显示），参考 DSH-Folk 的 virtual display
 
 ## 免责声明
 
-- GLM Coding Plan 的服务条款限定其用于官方列出的工具与产品环境。第三方客户端直连在技术上可行，但长期可能被限流或触发风控，**自用风险自负**。
-- AI 输出可能出错，代码与命令请自行核验；涉及数据、账号、资金的操作不要无人值守地交给模型。
-- 本项目与智谱、Z.ai、DeepSeek、DSH Go 均无隶属关系，也未使用其品牌素材。
+- 非官方客户端。账号登录与模型调用遵循平台公开接口，但长期使用请自行评估服务条款与风控风险。
+- Agent 会真的执行命令，`auto` 模式请谨慎开启。
+- 与智谱、Z.ai、DeepSeek、DSH Go 等均无隶属关系。
 
 ## License
 
