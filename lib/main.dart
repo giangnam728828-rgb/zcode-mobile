@@ -1,0 +1,58 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'l10n/strings.dart';
+import 'models/app_config.dart';
+import 'pages/home_shell.dart';
+import 'pages/setup_page.dart';
+import 'state/app_state.dart';
+import 'theme/app_theme.dart';
+
+void main() {
+  runApp(const ZCodeApp());
+}
+
+class ZCodeApp extends StatelessWidget {
+  const ZCodeApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider<AppState>(
+      create: (_) => AppState()..init(),
+      child: Consumer<AppState>(
+        builder: (BuildContext context, AppState state, Widget? _) {
+          final AppConfig? c = state.config;
+          final Accent accent = Accent.byId(c?.accentId);
+          final double scale = c?.fontScale ?? 1.0;
+          return MaterialApp(
+            title: 'ZCode',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.build(accent.seed, Brightness.light, scale),
+            darkTheme: AppTheme.build(accent.seed, Brightness.dark, scale),
+            themeMode: AppTheme.modeOf(c?.themeMode ?? 'system'),
+            home: const _Root(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Root extends StatelessWidget {
+  const _Root({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final AppState state = context.watch<AppState>();
+    if (!state.ready) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final bool configured = state.config != null && state.config!.isConfigured;
+    if (!configured) {
+      return SetupPage(s: S.of(state.config?.language));
+    }
+    return const HomeShell();
+  }
+}
