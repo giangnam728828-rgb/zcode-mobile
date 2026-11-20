@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../app_info.dart';
 import '../l10n/strings.dart';
 import '../models/app_config.dart';
 import '../state/app_state.dart';
@@ -290,7 +291,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const Spacer(),
                 Text(
-                  'v0.2.0',
+                  'v$kAppVersion',
                   style: TextStyle(
                     fontSize: 12,
                     color: cs.onSurface.withOpacity(0.4),
