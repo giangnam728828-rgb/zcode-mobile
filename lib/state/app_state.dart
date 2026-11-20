@@ -317,9 +317,13 @@ class AppState extends ChangeNotifier {
 
   void flushQueueNow() {
     if (_queue.isEmpty) return;
-    final _QueuedTurn next = _queue.removeAt(0);
+    final _QueuedTurn next = _queue.first;
+    // Cancel the live turn and drop the rest, then put this one back at the
+    // head so the turn's own cleanup starts it — starting it here would race
+    // with the cancelled run's `finally`.
     stop(flushQueue: false);
-    _startTurn(next.text, attachments: next.attachments);
+    _queue.insert(0, next);
+    notifyListeners();
   }
 
   void removeQueued(int index) {
