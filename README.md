@@ -64,7 +64,27 @@ flutter build apk --release
 # 产物：build/app/outputs/flutter-apk/app-release.apk
 ```
 
-签名：CI 从仓库 Secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_STORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`）还原密钥并写入 `android/key.properties`；本地没有该文件时会退回 debug 签名。
+### 签名
+
+所有正式包都用**同一枚固定 release 密钥**签名，因此新版本可以直接覆盖安装，不需要卸载。
+
+| 项 | 值 |
+|---|---|
+| alias | `zcode` |
+| 算法 | RSA 2048 / SHA384withRSA，有效期至 2056 |
+| 证书 SHA-256 | `32:0B:A9:4F:FD:6A:CB:DD:2B:C2:1A:85:2C:4B:69:C0:F3:67:1B:8C:35:BE:27:E2:B9:A8:0C:71:53:C4:9F:4A` |
+
+- **CI**：从 Secrets 还原 keystore 到 `android/app/zcode-release.jks` 并生成 `android/key.properties`；Secret 缺失时**直接失败**，不会退回 debug 签名；构建后再校验 APK 证书指纹，不一致也失败。
+- **本地**：把 `zcode-release.jks` 放到 `android/app/`，新建 `android/key.properties`：
+
+```properties
+storeFile=zcode-release.jks
+storePassword=你的口令
+keyAlias=zcode
+keyPassword=你的口令
+```
+
+缺少 `key.properties` 时，release 构建会报错并提示（debug 构建不受影响）。`key.properties` 与 `*.jks` 已在 `.gitignore` 中，不会进版本库。
 
 推送到 `main` 或打 `v*` 标签会触发 `.github/workflows/build.yml`：`analyze + test` → 构建 release APK → 上传 artifact；打标签时还会自动创建 Release 并附上 APK。
 
