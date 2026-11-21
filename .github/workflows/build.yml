@@ -78,9 +78,12 @@ jobs:
             exit 1
           fi
           ACTUAL="$("$APKSIGNER" verify --print-certs out/zcode-mobile.apk | grep -m1 'SHA-256 digest' | sed 's/^.*digest: //')"
+          # apksigner prints lowercase without separators; the stored fingerprint
+          # is uppercase with colons. Normalise before comparing.
+          norm() { echo "$1" | tr -d ':' | tr '[:upper:]' '[:lower:]'; }
           echo "expected: $EXPECTED_SHA256"
           echo "actual  : $ACTUAL"
-          if [ "$ACTUAL" != "$EXPECTED_SHA256" ]; then
+          if [ "$(norm "$ACTUAL")" != "$(norm "$EXPECTED_SHA256")" ]; then
             echo "::error::APK is not signed with the fixed project key — updates would be rejected by Android"
             exit 1
           fi
