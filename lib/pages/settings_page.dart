@@ -577,6 +577,33 @@ class _SettingsPageState extends State<SettingsPage> {
               cs: cs,
               onPick: (String v) => state.updatePrefs(language: v),
             ),
+            const _Gap(),
+            _label(s.isEnglish ? 'Glass' : '玻璃质感', cs),
+            const SizedBox(height: 6),
+            _segmented(
+              options: <String>[
+                s.isEnglish ? 'Off' : '关闭',
+                s.isEnglish ? 'Soft' : '标准',
+                s.isEnglish ? 'Liquid' : '强折射',
+              ],
+              values: const <String>['flat', 'soft', 'full'],
+              selected: c.glassQuality,
+              cs: cs,
+              onPick: (String v) => state.updatePrefs(glassQuality: v),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              s.isEnglish
+                  ? 'Liquid adds a 1.06x refraction pass on the header and dock. '
+                      'Switch to Soft or Off if scrolling stutters.'
+                  : '「强折射」只在顶栏和 Dock 上加一次 1.06 倍折射；'
+                      '如果滑动掉帧，降到「标准」或「关闭」。',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.5,
+                color: cs.onSurface.withValues(alpha: 0.42),
+              ),
+            ),
           ]),
           const SizedBox(height: 18),
           _section(s.dataSection, cs),
