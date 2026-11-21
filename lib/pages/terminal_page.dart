@@ -8,6 +8,7 @@ import '../l10n/strings.dart';
 import '../platform/device_bridge.dart';
 import '../services/workspace.dart';
 import '../state/app_state.dart';
+import '../widgets/glass_header.dart';
 
 /// A real shell inside the app sandbox. Not a full pty, but enough to inspect
 /// the workspace, chain commands and see exactly what the agent would see.
@@ -243,75 +244,64 @@ class _TerminalPageState extends State<TerminalPage> {
 
     return Scaffold(
       backgroundColor: widget.embedded ? Colors.transparent : null,
-      appBar: AppBar(
-        automaticallyImplyLeading: !widget.embedded,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(en ? 'Terminal' : '终端'),
-            Text(
+      body: Column(
+        children: <Widget>[
+          GlassHeader(
+            embedded: widget.embedded,
+            leading: widget.embedded ? null : const BackButton(),
+            title: en ? 'Terminal' : '终端',
+            subtitle: Text(
               _cwd.isEmpty ? 'sandbox' : _cwd,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-                fontFamily: 'monospace',
-                color: cs.onSurface.withValues(alpha: 0.4),
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+            actions: <Widget>[
+              HeaderAction(
+                icon: _mode == 'termux'
+                    ? Icons.bolt_rounded
+                    : (_mode == 'priv'
+                        ? Icons.shield_rounded
+                        : Icons.memory_rounded),
+                tint: _mode == 'builtin' ? null : cs.primary,
+                tooltip: _mode == 'builtin'
+                    ? (en ? 'Built-in sh · tap for Termux' : '内置 sh · 点一下切到 Termux')
+                    : (_mode == 'termux'
+                        ? (en
+                            ? 'Termux · tap for root/Shizuku'
+                            : 'Termux · 点一下切到 root/Shizuku')
+                        : (en
+                            ? 'Privileged shell · tap for built-in sh'
+                            : '特权 shell · 点一下回到内置 sh')),
+                onTap: _cycleMode,
               ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: _mode == 'builtin'
-                ? (en ? 'Built-in sh · tap for Termux'
-                      : '内置 sh · 点一下切到 Termux')
-                : (_mode == 'termux'
-                    ? (en ? 'Termux · tap for root/Shizuku'
-                          : 'Termux · 点一下切到 root/Shizuku')
-                    : (en ? 'Privileged shell · tap for built-in sh'
-                          : '特权 shell · 点一下回到内置 sh')),
-            icon: Icon(
-              _mode == 'termux'
-                  ? Icons.bolt_rounded
-                  : (_mode == 'priv'
-                      ? Icons.shield_rounded
-                      : Icons.memory_rounded),
-              size: 19,
-              color: _mode == 'builtin' ? null : cs.primary,
-            ),
-            onPressed: _cycleMode,
+              HeaderAction(
+                icon: Icons.copy_all_rounded,
+                tooltip: en ? 'Copy transcript' : '复制全部输出',
+                onTap: _entries.isEmpty
+                    ? null
+                    : () {
+                        final String text = _entries
+                            .map((_Entry e) => '\$ ${e.command}\n${e.output}\n')
+                            .join('\n');
+                        Clipboard.setData(ClipboardData(text: text));
+                        ScaffoldMessenger.of(context)
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(SnackBar(
+                            content: Text(s.copied),
+                            duration: const Duration(milliseconds: 1100),
+                          ));
+                      },
+              ),
+              HeaderAction(
+                icon: Icons.delete_sweep_outlined,
+                tooltip: en ? 'Clear' : '清屏',
+                onTap: _entries.isEmpty
+                    ? null
+                    : () => setState(() => _entries.clear()),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: en ? 'Copy transcript' : '复制全部输出',
-            icon: const Icon(Icons.copy_all_rounded, size: 19),
-            onPressed: _entries.isEmpty
-                ? null
-                : () {
-                    final String text = _entries
-                        .map((_Entry e) => '\$ ${e.command}\n${e.output}\n')
-                        .join('\n');
-                    Clipboard.setData(ClipboardData(text: text));
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(SnackBar(
-                        content: Text(s.copied),
-                        duration: const Duration(milliseconds: 1100),
-                      ));
-                  },
-          ),
-          IconButton(
-            tooltip: en ? 'Clear' : '清屏',
-            icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-            onPressed: _entries.isEmpty
-                ? null
-                : () => setState(() => _entries.clear()),
-          ),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
           Expanded(
             child: _entries.isEmpty
                 ? _welcome(cs, en)

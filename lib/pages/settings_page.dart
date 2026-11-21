@@ -13,6 +13,7 @@ import '../services/workspace.dart';
 import '../state/app_state.dart';
 import '../theme/glass.dart';
 import '../theme/tokens.dart';
+import '../widgets/glass_header.dart';
 import 'automation_page.dart';
 import 'files_page.dart';
 import 'modules_page.dart';
@@ -20,6 +21,13 @@ import 'plugins_page.dart';
 import 'terminal_page.dart';
 import 'workspace_picker_page.dart';
 
+/// Settings is a stack of labelled groups, not one long form.
+///
+/// Order is by frequency of change, not by importance: automation and the
+/// account are read every few days, so they sit at the top; the appearance
+/// switches are touched once and then forgotten, so they sink. Everything
+/// that opens another screen is a row with a chevron; everything that is a
+/// value you own is a row with the value visible.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key, this.embedded = false}) : super(key: key);
 
@@ -38,6 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _system;
   late final TextEditingController _maxTokens;
   bool _dirty = false;
+  bool _keyVisible = false;
 
   @override
   void initState() {
@@ -148,544 +157,517 @@ class _SettingsPageState extends State<SettingsPage> {
     final AppState state = context.watch<AppState>();
     final AppConfig c = state.config ?? AppConfig.empty;
     final S s = S.of(c.language);
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme cs = theme.colorScheme;
+    final bool en = s.isEnglish;
+    final AppPalette p = AppPalette.of(context);
+    final ColorScheme cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: widget.embedded ? Colors.transparent : null,
-      appBar: AppBar(
-        automaticallyImplyLeading: !widget.embedded,
-        title: Text(s.settings),
-        actions: <Widget>[
-          if (_dirty)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: TextButton(
-                onPressed: () => _save(state),
-                child: Text(
-                  s.ok,
-                  style: TextStyle(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+      body: Column(
         children: <Widget>[
-          _autoEntry(state, cs, s),
-          _section(s.account, cs),
-          _card(<Widget>[
-            _providerRow(c, state, s, cs),
-            const _Gap(),
-            _label(s.baseUrl, cs),
-            TextField(
-              controller: _baseUrl,
-              style: const TextStyle(fontSize: 13.5),
-              decoration: const InputDecoration(isDense: true),
+          GlassHeader(
+            embedded: widget.embedded,
+            leading: widget.embedded ? null : const BackButton(),
+            title: s.settings,
+            subtitle: Text(
+              state.session == null
+                  ? (en ? 'local configuration' : '本地配置')
+                  : _sessionLine(state),
             ),
-            const _Gap(),
-            _label(s.account, cs),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                children: <Widget>[
-                  Icon(Icons.account_circle_outlined, size: 20, color: cs.primary),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          state.session?.displayName ??
-                              (state.session?.region == 'zai'
-                                  ? 'Z.ai account'
-                                  : 'BigModel account'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _sessionLine(state),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurface.withValues(alpha: 0.45),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => _confirmSignOut(state),
-                    child: Text(s.isEnglish ? 'Sign out' : '退出登录'),
-                  ),
-                ],
-              ),
-            ),
-            const _Gap(),
-            _label(s.model, cs),
-            TextField(
-              controller: _model,
-              style: const TextStyle(fontSize: 13.5),
-              decoration: const InputDecoration(isDense: true),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: <Widget>[
-                  for (final String m in kGlmModels)
-                    _chip(
-                      label: m,
-                      active: _model.text.trim() == m,
-                      onTap: () {
-                        _model.text = m;
-                        setState(() {});
-                      },
-                      cs: cs,
-                    ),
-                ],
-              ),
-            ),
-            const _Gap(),
-            _label(s.systemPrompt, cs),
-            TextField(
-              controller: _system,
-              minLines: 2,
-              maxLines: 5,
-              style: const TextStyle(fontSize: 13, height: 1.5),
-              decoration: const InputDecoration(isDense: true),
-            ),
-            const _Gap(),
-            _label(s.maxTokens, cs),
-            TextField(
-              controller: _maxTokens,
-              keyboardType: TextInputType.number,
-              inputFormatters: <TextInputFormatter>[
-                FilteringTextInputFormatter.digitsOnly,
-              ],
-              style: const TextStyle(fontSize: 13.5),
-              decoration: const InputDecoration(isDense: true),
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _section(s.isEnglish ? 'Agent' : '智能体', cs),
-          _card(<Widget>[
-            _label(s.isEnglish ? 'Tool approval' : '工具审批', cs),
-            const SizedBox(height: 6),
-            _segmented(
-              options: <String>[
-                s.isEnglish ? 'Risky only' : '仅危险操作',
-                s.isEnglish ? 'Ask all' : '每次询问',
-                s.isEnglish ? 'Auto' : '自动执行',
-              ],
-              values: <String>['risky', 'ask', 'auto'],
-              selected: c.approvalMode,
-              cs: cs,
-              onPick: (String v) => state.updatePrefs(approvalMode: v),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              c.approvalMode == 'auto'
-                  ? (s.isEnglish
-                      ? 'The agent can run any tool without asking. Use it for trusted tasks.'
-                      : '智能体可以不经确认执行任何工具，请只在信任的任务里使用。')
-                  : c.approvalMode == 'ask'
-                      ? (s.isEnglish
-                          ? 'Every tool call waits for your tap.'
-                          : '每一次工具调用都会等你确认。')
-                      : (s.isEnglish
-                          ? 'Only deletes, moves and destructive shell commands ask.'
-                          : '只有删除、移动和破坏性 shell 命令会询问。'),
-              style: TextStyle(
-                fontSize: 11,
-                height: 1.5,
-                color: cs.onSurface.withValues(alpha: 0.38),
-              ),
-            ),
-            const _Gap(),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _label(
-                    '${s.isEnglish ? 'Temperature' : '温度'}  '
-                    '${c.temperature.toStringAsFixed(1)}',
-                    cs,
-                  ),
-                ),
-                Text(
-                  c.temperature <= 0.35
-                      ? (s.isEnglish ? 'precise' : '严谨')
-                      : c.temperature >= 0.85
-                          ? (s.isEnglish ? 'creative' : '发散')
-                          : (s.isEnglish ? 'balanced' : '均衡'),
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: cs.onSurface.withValues(alpha: 0.35),
-                  ),
-                ),
-              ],
-            ),
-            Slider(
-              value: c.temperature.clamp(0.0, 1.0),
-              min: 0,
-              max: 1,
-              divisions: 20,
-              onChanged: (double v) =>
-                  state.updatePrefs(temperature: (v * 10).round() / 10),
-            ),
-            const _Gap(),
-            _switchRow(
-              icon: Icons.compress_rounded,
-              label: s.isEnglish ? 'Auto-compact context' : '自动压缩上下文',
-              hint: s.isEnglish
-                  ? 'Fold older turns into a summary before the window fills up.'
-                  : '上下文变长前，自动把早期对话折叠成摘要。',
-              value: c.autoCompact,
-              onChanged: (bool v) => state.updatePrefs(autoCompact: v),
-              cs: cs,
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _section(s.isEnglish ? 'Workspace' : '工作区', cs),
-          _card(<Widget>[
-            _navRow(
-              icon: Icons.smartphone_rounded,
-              label: s.isEnglish ? 'Workspace folder' : '工作区文件夹',
-              hint: <String>[
-                state.workspacePath.isEmpty
-                    ? '—'
-                    : WorkspaceResolver.label(state.workspacePath),
-                if (DeviceBridge.isAndroid && !state.storageAccess)
-                  (s.isEnglish ? 'file access not granted' : '未授予文件访问')
-                else if (DeviceBridge.isAndroid &&
-                    !WorkspaceResolver.isShared(state.workspacePath))
-                  (s.isEnglish
-                      ? 'still private — tap to move to Internal storage'
-                      : '仍在私有目录，点一下换到内部存储'),
-                if (state.termuxAvailable)
-                  (s.isEnglish ? 'Termux ready' : 'Termux 可用'),
-              ].join(' · '),
-              onTap: () async {
-                final bool? changed = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute<bool>(
-                    builder: (_) =>
-                        WorkspacePickerPage(initialPath: state.workspacePath),
-                  ),
-                );
-                if (mounted && changed == true) setState(() {});
-              },
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            _navRow(
-              icon: Icons.auto_awesome_rounded,
-              label: s.isEnglish ? 'Automation' : '自动化',
-              hint: <String>[
-                '${state.automation?.enabledRules.length ?? 0} '
-                    '${s.isEnglish ? 'rules' : '条规则'}',
-                state.privilege.label,
-                if (state.automation != null)
-                  '${s.isEnglish ? 'today' : '今天'} ${state.automation!.todayRuns}',
-              ].join(' · '),
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const AutomationPage()),
-                );
-                if (mounted) setState(() {});
-              },
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            _navRow(
-              icon: Icons.folder_open_rounded,
-              label: s.isEnglish ? 'Files' : '文件管理',
-              hint: s.isEnglish
-                  ? 'Browse, edit and reference workspace files'
-                  : '浏览、编辑文件，或插入 @ 引用',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const FilesPage()),
-              ),
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            _navRow(
-              icon: Icons.terminal_rounded,
-              label: s.isEnglish ? 'Terminal' : '终端',
-              hint: s.isEnglish
-                  ? 'Run shell commands with the agent\'s PATH'
-                  : '用与智能体相同的 PATH 执行命令',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const TerminalPage()),
-              ),
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            _navRow(
-              icon: Icons.extension_outlined,
-              label: s.isEnglish ? 'Modules' : '扩展模块',
-              hint: s.isEnglish
-                  ? 'Install tree, peek and other CLI helpers'
-                  : '安装 tree、peek 等命令行小工具',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const ModulesPage()),
-              ),
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            _navRow(
-              icon: Icons.widgets_outlined,
-              label: s.isEnglish ? 'Plugins' : '插件市场',
-              hint: <String>[
-                if (state.pluginCenter != null)
-                  '${state.pluginCenter!.installed.length} ${s.isEnglish ? 'installed' : '个已安装'}',
-                if (state.mcpToolCount > 0)
-                  'MCP ${state.mcpToolCount} ${s.isEnglish ? 'tools' : '个工具'}',
-                if (state.pluginCenter?.installed.isEmpty != false &&
-                    state.mcpToolCount == 0)
-                  (s.isEnglish
-                      ? 'Skills, commands, sub-agents and MCP — tap to install'
-                      : '技能、命令、子智能体与 MCP，点一下即可安装'),
-              ].join(' · '),
-              onTap: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const PluginsPage()),
-                );
-                if (mounted) setState(() {});
-              },
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            _navRow(
-              icon: Icons.rule_rounded,
-              label: s.isEnglish ? 'Project rules' : '项目规则 AGENTS.md',
-              hint: state.tools != null &&
-                      File(state.tools!.resolvePath('AGENTS.md')).existsSync()
-                  ? (s.isEnglish
-                      ? 'Loaded into every conversation'
-                      : '已在每次对话中自动加载')
-                  : (s.isEnglish
-                      ? 'Create one to teach the agent this project'
-                      : '创建后智能体会自动遵守这份说明'),
-              onTap: () => _openAgents(state, s),
-              cs: cs,
-            ),
-            const Divider(height: 14),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    state.workspacePath.isEmpty ? '—' : state.workspacePath,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontFamily: 'monospace',
-                      color: cs.onSurface.withValues(alpha: 0.38),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  DeviceBridge.isAndroid
-                      ? (state.storageAccess
-                          ? (s.isEnglish ? 'real files' : '手机真实文件')
-                          : (s.isEnglish ? 'private dir' : '私有目录'))
-                      : (s.isEnglish ? 'sandbox' : '沙箱'),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: cs.onSurface.withValues(alpha: 0.3),
-                  ),
-                ),
-              ],
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _section(s.appearance, cs),
-          _card(<Widget>[
-            _label(s.theme, cs),
-            const SizedBox(height: 6),
-            _segmented(
-              options: <String>[s.themeSystem, s.themeLight, s.themeDark],
-              values: <String>['system', 'light', 'dark'],
-              selected: c.themeMode,
-              cs: cs,
-              onPick: (String v) => state.updatePrefs(themeMode: v),
-            ),
-            const _Gap(),
-            _label(s.accent, cs),
-            const SizedBox(height: 8),
-            Row(
-              children: <Widget>[
-                for (final Accent a in Accent.all)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: GestureDetector(
-                      onTap: () => state.updatePrefs(accentId: a.id),
-                      child: Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: Color(a.seed),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: c.accentId == a.id
-                                ? cs.onSurface.withValues(alpha: 0.75)
-                                : Colors.transparent,
-                            width: 2.2,
-                          ),
-                        ),
-                        child: c.accentId == a.id
-                            ? const Icon(Icons.check_rounded,
-                                size: 17, color: Colors.white)
-                            : null,
+            actions: <Widget>[
+              if (_dirty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: TextButton(
+                    onPressed: () => _save(state),
+                    style: TextButton.styleFrom(
+                      foregroundColor: cs.primary,
+                      minimumSize: const Size(56, 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppTokens.brSm,
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const _Gap(),
-            _label('${s.fontSize}  ${_fontLabel(c.fontScale, s)}', cs),
-            const SizedBox(height: 6),
-            _segmented(
-              options: <String>['A-', 'A', 'A+', 'A++'],
-              values: <String>['0.9', '1.0', '1.1', '1.2'],
-              selected: c.fontScale.toStringAsFixed(1),
-              cs: cs,
-              onPick: (String v) =>
-                  state.updatePrefs(fontScale: double.parse(v)),
-            ),
-            const _Gap(),
-            _label(s.language, cs),
-            const SizedBox(height: 6),
-            _segmented(
-              options: <String>['简体中文', 'English'],
-              values: <String>['zh', 'en'],
-              selected: c.language,
-              cs: cs,
-              onPick: (String v) => state.updatePrefs(language: v),
-            ),
-            const _Gap(),
-            _label(s.isEnglish ? 'Glass' : '玻璃质感', cs),
-            const SizedBox(height: 6),
-            _segmented(
-              options: <String>[
-                s.isEnglish ? 'Off' : '关闭',
-                s.isEnglish ? 'Soft' : '标准',
-                s.isEnglish ? 'Liquid' : '强折射',
-              ],
-              values: const <String>['flat', 'soft', 'full'],
-              selected: c.glassQuality,
-              cs: cs,
-              onPick: (String v) => state.updatePrefs(glassQuality: v),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              s.isEnglish
-                  ? 'Liquid adds a 1.06x refraction pass on the header and dock. '
-                      'Switch to Soft or Off if scrolling stutters.'
-                  : '「强折射」只在顶栏和 Dock 上加一次 1.06 倍折射；'
-                      '如果滑动掉帧，降到「标准」或「关闭」。',
-              style: TextStyle(
-                fontSize: 11,
-                height: 1.5,
-                color: cs.onSurface.withValues(alpha: 0.42),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _section(s.dataSection, cs),
-          _card(<Widget>[
-            _actionRow(
-              icon: Icons.key_outlined,
-              label: s.exportConfig,
-              hint: s.exportHint,
-              onTap: () => _showExport(state, c, s),
-            ),
-            const Divider(height: 18),
-            _actionRow(
-              icon: Icons.download_outlined,
-              label: s.importConfig,
-              hint: s.importHint,
-              onTap: () => _showImport(state, s),
-            ),
-            const Divider(height: 18),
-            _actionRow(
-              icon: Icons.delete_forever_outlined,
-              label: s.clearAll,
-              hint: s.clearAllConfirm,
-              danger: true,
-              onTap: () => _confirmWipe(state, s),
-            ),
-          ]),
-          const SizedBox(height: 18),
-          _section(s.about, cs),
-          _card(<Widget>[
-            Row(
-              children: <Widget>[
-                Text(
-                  '${s.appName} Mobile',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'v$kAppVersion',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurface.withValues(alpha: 0.4),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              s.disclaimer,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.55,
-                color: cs.onSurface.withValues(alpha: 0.45),
-              ),
-            ),
-          ]),
-          if (_dirty)
-            Padding(
-              padding: const EdgeInsets.only(top: 22),
-              child: SizedBox(
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: () => _save(state),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: cs.primary,
-                    foregroundColor: cs.onPrimary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(13),
+                    child: Text(
+                      s.ok,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                   ),
-                  child: Text(
-                    s.ok,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
                 ),
-              ),
+            ],
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 36),
+              children: <Widget>[
+                _autoEntry(state, cs, s),
+                _accountGroup(state, s, cs),
+                _Group(
+                  title: en ? 'Model service' : '模型服务',
+                  note: en
+                      ? 'The endpoint and key are used for every new turn.'
+                      : '接口地址与密钥用于每一轮新请求。',
+                  children: <Widget>[
+                    _FieldTile(
+                      label: s.provider,
+                      child: _Seg(
+                        options: <String>['BigModel 国内', 'Z.ai 海外'],
+                        values: const <String>['bigmodel', 'zai'],
+                        selected: c.provider,
+                        onPick: (String v) {
+                          final String url = v == 'zai'
+                              ? Endpoints.zai
+                              : Endpoints.bigmodel;
+                          _baseUrl.text = url;
+                          state.saveConfig(
+                            c.copyWith(provider: v, baseUrl: url),
+                          );
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    _FieldTile(
+                      label: s.baseUrl,
+                      child: _input(_baseUrl, hint: 'https://…'),
+                    ),
+                    _FieldTile(
+                      label: s.model,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          _input(_model, hint: 'glm-4.6'),
+                          const SizedBox(height: 9),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: <Widget>[
+                              for (final String m in kGlmModels)
+                                _Chip(
+                                  label: m,
+                                  active: _model.text.trim() == m,
+                                  onTap: () {
+                                    _model.text = m;
+                                    setState(() {});
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    _FieldTile(
+                      label: 'API Key',
+                      child: TextField(
+                        controller: _key,
+                        obscureText: !_keyVisible,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontFamily: 'monospace',
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: en
+                              ? 'filled in automatically after sign-in'
+                              : '登录后自动填写',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _keyVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              size: 18,
+                              color: p.textTertiary,
+                            ),
+                            onPressed: () =>
+                                setState(() => _keyVisible = !_keyVisible),
+                          ),
+                          suffixIconConstraints: const BoxConstraints(
+                            minWidth: 34,
+                            minHeight: 34,
+                          ),
+                        ),
+                      ),
+                    ),
+                    _FieldTile(
+                      label: s.systemPrompt,
+                      child: TextField(
+                        controller: _system,
+                        minLines: 2,
+                        maxLines: 5,
+                        style: const TextStyle(fontSize: 13, height: 1.5),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: 'You are a coding agent…',
+                        ),
+                      ),
+                    ),
+                    _FieldTile(
+                      label: s.maxTokens,
+                      child: _input(
+                        _maxTokens,
+                        hint: '8192',
+                        keyboardType: TextInputType.number,
+                        formatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                _Group(
+                  title: en ? 'Agent' : '智能体',
+                  children: <Widget>[
+                    _FieldTile(
+                      label: en ? 'Tool approval' : '工具审批',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          _Seg(
+                            options: <String>[
+                              en ? 'Risky only' : '仅危险操作',
+                              en ? 'Ask all' : '每次询问',
+                              en ? 'Auto' : '自动执行',
+                            ],
+                            values: const <String>['risky', 'ask', 'auto'],
+                            selected: c.approvalMode,
+                            onPick: (String v) =>
+                                state.updatePrefs(approvalMode: v),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            c.approvalMode == 'auto'
+                                ? (en
+                                    ? 'The agent can run any tool without asking. '
+                                        'Use it for trusted tasks.'
+                                    : '智能体可以不经确认执行任何工具，请只在信任的任务里使用。')
+                                : c.approvalMode == 'ask'
+                                    ? (en
+                                        ? 'Every tool call waits for your tap.'
+                                        : '每一次工具调用都会等你确认。')
+                                    : (en
+                                        ? 'Only deletes, moves and destructive shell '
+                                            'commands ask.'
+                                        : '只有删除、移动和破坏性 shell 命令会询问。'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.5,
+                              color: p.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _Tile(
+                      label: en ? 'Temperature' : '温度',
+                      sub: c.temperature <= 0.35
+                          ? (en ? 'precise' : '严谨')
+                          : c.temperature >= 0.85
+                              ? (en ? 'creative' : '发散')
+                              : (en ? 'balanced' : '均衡'),
+                      trailing: Text(
+                        c.temperature.toStringAsFixed(1),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: p.textSecondary,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                      bottom: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 3,
+                          overlayShape:
+                              const RoundSliderOverlayShape(overlayRadius: 16),
+                          thumbShape: const RoundSliderThumbShape(
+                              enabledThumbRadius: 8),
+                        ),
+                        child: Slider(
+                          value: c.temperature.clamp(0.0, 1.0),
+                          min: 0,
+                          max: 1,
+                          divisions: 20,
+                          onChanged: (double v) => state.updatePrefs(
+                              temperature: (v * 10).round() / 10),
+                        ),
+                      ),
+                    ),
+                    _Tile(
+                      icon: Icons.compress_rounded,
+                      label: en ? 'Auto-compact context' : '自动压缩上下文',
+                      sub: en
+                          ? 'Fold older turns into a summary before the window fills up.'
+                          : '上下文变长前，自动把早期对话折叠成摘要。',
+                      trailing: _MiniSwitch(
+                        value: c.autoCompact,
+                        onChanged: (bool v) =>
+                            state.updatePrefs(autoCompact: v),
+                      ),
+                    ),
+                    _Tile(
+                      icon: Icons.rule_rounded,
+                      label: en ? 'Project rules' : '项目规则 AGENTS.md',
+                      sub: state.tools != null &&
+                              File(state.tools!.resolvePath('AGENTS.md'))
+                                  .existsSync()
+                          ? (en
+                              ? 'Loaded into every conversation'
+                              : '已在每次对话中自动加载')
+                          : (en
+                              ? 'Create one to teach the agent this project'
+                              : '创建后智能体会自动遵守这份说明'),
+                      onTap: () => _openAgents(state, s),
+                    ),
+                  ],
+                ),
+                _Group(
+                  title: en ? 'Workspace' : '工作区',
+                  note: <String>[
+                    DeviceBridge.isAndroid
+                        ? (state.storageAccess
+                            ? (en
+                                ? 'Files are read from Internal storage.'
+                                : '文件读写走手机内部存储。')
+                            : (en
+                                ? 'Only the app\'s private folder is visible.'
+                                : '目前只能访问应用私有目录。'))
+                        : (en ? 'Sandboxed workspace.' : '沙箱工作区。'),
+                  ].join(),
+                  children: <Widget>[
+                    _Tile(
+                      icon: Icons.smartphone_rounded,
+                      label: en ? 'Workspace folder' : '工作区文件夹',
+                      sub: <String>[
+                        state.workspacePath.isEmpty
+                            ? '—'
+                            : WorkspaceResolver.label(state.workspacePath),
+                        if (DeviceBridge.isAndroid && !state.storageAccess)
+                          (en ? 'file access not granted' : '未授予文件访问')
+                        else if (DeviceBridge.isAndroid &&
+                            !WorkspaceResolver.isShared(state.workspacePath))
+                          (en
+                              ? 'still private — tap to move to Internal storage'
+                              : '仍在私有目录，点一下换到内部存储'),
+                        if (state.termuxAvailable)
+                          (en ? 'Termux ready' : 'Termux 可用'),
+                      ].join(' · '),
+                      onTap: () async {
+                        final bool? changed =
+                            await Navigator.of(context).push<bool>(
+                          MaterialPageRoute<bool>(
+                            builder: (_) => WorkspacePickerPage(
+                                initialPath: state.workspacePath),
+                          ),
+                        );
+                        if (mounted && changed == true) setState(() {});
+                      },
+                    ),
+                    _Tile(
+                      icon: Icons.folder_open_rounded,
+                      label: en ? 'Files' : '文件管理',
+                      sub: en
+                          ? 'Browse, edit and reference workspace files'
+                          : '浏览、编辑文件，或插入 @ 引用',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => const FilesPage()),
+                      ),
+                    ),
+                    _Tile(
+                      icon: Icons.terminal_rounded,
+                      label: en ? 'Terminal' : '终端',
+                      sub: en
+                          ? 'Run shell commands with the agent\'s PATH'
+                          : '用与智能体相同的 PATH 执行命令',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => const TerminalPage()),
+                      ),
+                    ),
+                    _Tile(
+                      icon: Icons.extension_outlined,
+                      label: en ? 'Modules' : '扩展模块',
+                      sub: en
+                          ? 'Install tree, peek and other CLI helpers'
+                          : '安装 tree、peek 等命令行小工具',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => const ModulesPage()),
+                      ),
+                    ),
+                    _Tile(
+                      icon: Icons.widgets_outlined,
+                      label: en ? 'Plugins' : '插件市场',
+                      sub: <String>[
+                        if (state.pluginCenter != null)
+                          '${state.pluginCenter!.installed.length} ${en ? 'installed' : '个已安装'}',
+                        if (state.mcpToolCount > 0)
+                          'MCP ${state.mcpToolCount} ${en ? 'tools' : '个工具'}',
+                        if (state.pluginCenter?.installed.isEmpty != false &&
+                            state.mcpToolCount == 0)
+                          (en
+                              ? 'Skills, commands, sub-agents and MCP'
+                              : '技能、命令、子智能体与 MCP'),
+                      ].join(' · '),
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                              builder: (_) => const PluginsPage()),
+                        );
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+                _Group(
+                  title: s.appearance,
+                  children: <Widget>[
+                    _FieldTile(
+                      label: s.theme,
+                      child: _Seg(
+                        options: <String>[
+                          s.themeSystem,
+                          s.themeLight,
+                          s.themeDark,
+                        ],
+                        values: const <String>['system', 'light', 'dark'],
+                        selected: c.themeMode,
+                        onPick: (String v) =>
+                            state.updatePrefs(themeMode: v),
+                      ),
+                    ),
+                    _Tile(
+                      label: s.accent,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          for (final Accent a in Accent.all)
+                            GestureDetector(
+                              onTap: () => state.updatePrefs(accentId: a.id),
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Color(a.seed),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: c.accentId == a.id
+                                          ? p.text
+                                          : Colors.transparent,
+                                      width: 1.8,
+                                    ),
+                                  ),
+                                  child: c.accentId == a.id
+                                      ? const Icon(Icons.check_rounded,
+                                          size: 13, color: Colors.white)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    _FieldTile(
+                      label: '${s.fontSize}  ${_fontLabel(c.fontScale, s)}',
+                      child: _Seg(
+                        options: const <String>['A-', 'A', 'A+', 'A++'],
+                        values: const <String>['0.9', '1.0', '1.1', '1.2'],
+                        selected: c.fontScale.toStringAsFixed(1),
+                        onPick: (String v) =>
+                            state.updatePrefs(fontScale: double.parse(v)),
+                      ),
+                    ),
+                    _FieldTile(
+                      label: s.language,
+                      child: _Seg(
+                        options: const <String>['简体中文', 'English'],
+                        values: const <String>['zh', 'en'],
+                        selected: c.language,
+                        onPick: (String v) =>
+                            state.updatePrefs(language: v),
+                      ),
+                    ),
+                    _FieldTile(
+                      label: en ? 'Glass' : '玻璃质感',
+                      note: en
+                          ? 'Liquid adds one 1.06x refraction pass on the header '
+                              'and dock. Drop to Soft or Off if scrolling stutters.'
+                          : '「强折射」只在顶栏和 Dock 上加一次 1.06 倍折射；'
+                              '如果滑动掉帧，降到「标准」或「关闭」。',
+                      child: _Seg(
+                        options: <String>[
+                          en ? 'Off' : '关闭',
+                          en ? 'Soft' : '标准',
+                          en ? 'Liquid' : '强折射',
+                        ],
+                        values: const <String>['flat', 'soft', 'full'],
+                        selected: c.glassQuality,
+                        onPick: (String v) =>
+                            state.updatePrefs(glassQuality: v),
+                      ),
+                    ),
+                  ],
+                ),
+                _Group(
+                  title: s.dataSection,
+                  children: <Widget>[
+                    _Tile(
+                      icon: Icons.key_outlined,
+                      label: s.exportConfig,
+                      sub: s.exportHint,
+                      onTap: () => _showExport(state, c, s),
+                    ),
+                    _Tile(
+                      icon: Icons.download_outlined,
+                      label: s.importConfig,
+                      sub: s.importHint,
+                      onTap: () => _showImport(state, s),
+                    ),
+                    _Tile(
+                      icon: Icons.delete_forever_outlined,
+                      label: s.clearAll,
+                      sub: s.clearAllConfirm,
+                      danger: true,
+                      onTap: () => _confirmWipe(state, s),
+                    ),
+                  ],
+                ),
+                _Group(
+                  title: s.about,
+                  children: <Widget>[
+                    _Tile(
+                      label: '${s.appName} Mobile',
+                      sub: s.disclaimer,
+                      alignTop: true,
+                      trailing: Text(
+                        'v$kAppVersion',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: p.textTertiary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -698,6 +680,73 @@ class _SettingsPageState extends State<SettingsPage> {
     return 'XL';
   }
 
+  Widget _accountGroup(AppState state, S s, ColorScheme cs) {
+    final bool en = s.isEnglish;
+    final AppPalette p = AppPalette.of(context);
+    final AccountSession? session = state.session;
+    return _Group(
+      title: s.isEnglish ? 'Account' : '账号',
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.12),
+                  borderRadius: AppTokens.brSm,
+                ),
+                child: Icon(Icons.account_circle_outlined,
+                    size: 19, color: cs.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      session?.displayName ??
+                          (session?.region == 'zai'
+                              ? 'Z.ai account'
+                              : 'BigModel account'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: p.text,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _sessionLine(state),
+                      style: TextStyle(fontSize: 11.5, color: p.textTertiary),
+                    ),
+                  ],
+                ),
+              ),
+              if (session != null)
+                TextButton(
+                  onPressed: () => _confirmSignOut(state),
+                  style: TextButton.styleFrom(
+                    foregroundColor: p.textSecondary,
+                    minimumSize: const Size(48, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  child: Text(
+                    en ? 'Sign out' : '退出登录',
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Automation used to be its own dock tab. It lives here now, at the very
   /// top, because it is the one group you come back to every few days — and
   /// burying it under the account form would make it effectively invisible.
@@ -707,10 +756,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final int today = state.automation?.todayRuns ?? 0;
     final AppPalette p = AppPalette.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      padding: const EdgeInsets.only(top: 2, bottom: 0),
       child: SolidCard(
         radius: AppTokens.rLg,
-        padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         onTap: () async {
           await Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const AutomationPage()),
@@ -720,8 +769,8 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Row(
           children: <Widget>[
             Container(
-              width: 36,
-              height: 36,
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 color: cs.primary.withValues(alpha: 0.12),
                 borderRadius: AppTokens.brSm,
@@ -749,7 +798,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       '${en ? 'today' : '今天'} $today',
                       state.privilege.label,
                     ].join(' · '),
-                    style: TextStyle(fontSize: 11, color: p.textTertiary),
+                    style: TextStyle(fontSize: 11.5, color: p.textTertiary),
                   ),
                 ],
               ),
@@ -761,312 +810,28 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _navRow({
-    required IconData icon,
-    required String label,
-    required String hint,
-    required VoidCallback onTap,
-    required ColorScheme cs,
+  /// Borderless input used inside a group row. The row already provides the
+  /// visual container, so a bordered field inside a bordered card reads as a
+  /// box in a box.
+  Widget _input(
+    TextEditingController controller, {
+    String? hint,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? formatters,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          children: <Widget>[
-            Icon(icon, size: 18, color: cs.primary.withValues(alpha: 0.8)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(label, style: const TextStyle(fontSize: 13.5)),
-                  const SizedBox(height: 2),
-                  Text(
-                    hint,
-                    style: TextStyle(
-                      fontSize: 11,
-                      height: 1.45,
-                      color: cs.onSurface.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                size: 17, color: cs.onSurface.withValues(alpha: 0.3)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _switchRow({
-    required IconData icon,
-    required String label,
-    required String hint,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-    required ColorScheme cs,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: 18, color: cs.primary.withValues(alpha: 0.8)),
-        ),
-        const SizedBox(width: 11),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(label, style: const TextStyle(fontSize: 13.5)),
-              const SizedBox(height: 2),
-              Text(
-                hint,
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.45,
-                  color: cs.onSurface.withValues(alpha: 0.4),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-      ],
-    );
-  }
-
-  Widget _section(String title, ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
-          color: cs.onSurface.withValues(alpha: 0.42),
-        ),
-      ),
-    );
-  }
-
-  Widget _card(List<Widget> children) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).dividerTheme.color ?? Colors.transparent,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
-    );
-  }
-
-  Widget _label(String text, ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 5, left: 2),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          color: cs.onSurface.withValues(alpha: 0.55),
-        ),
-      ),
-    );
-  }
-
-  Widget _providerRow(AppConfig c, AppState state, S s, ColorScheme cs) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        _label(s.provider, cs),
-        Row(
-          children: <Widget>[
-            _chip(
-              label: 'BigModel 国内',
-              active: c.provider == 'bigmodel',
-              onTap: () {
-                _baseUrl.text = Endpoints.bigmodel;
-                state.saveConfig(c.copyWith(
-                  provider: 'bigmodel',
-                  baseUrl: Endpoints.bigmodel,
-                ));
-              },
-              cs: cs,
-            ),
-            const SizedBox(width: 8),
-            _chip(
-              label: 'Z.ai 海外',
-              active: c.provider == 'zai',
-              onTap: () {
-                _baseUrl.text = Endpoints.zai;
-                state.saveConfig(c.copyWith(
-                  provider: 'zai',
-                  baseUrl: Endpoints.zai,
-                ));
-              },
-              cs: cs,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _chip({
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-    required ColorScheme cs,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? cs.primary.withValues(alpha: 0.12) : null,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active
-                ? cs.primary.withValues(alpha: 0.4)
-                : cs.onSurface.withValues(alpha: 0.14),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-            color:
-                active ? cs.primary : cs.onSurface.withValues(alpha: 0.65),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _segmented({
-    required List<String> options,
-    required List<String> values,
-    required String selected,
-    required ColorScheme cs,
-    required ValueChanged<String> onPick,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: cs.onSurface.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(11),
-      ),
-      child: Row(
-        children: <Widget>[
-          for (int i = 0; i < options.length; i++)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onPick(values[i]),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: selected == values[i]
-                        ? (Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF262D38)
-                            : Colors.white)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
-                    boxShadow: selected == values[i]
-                        ? <BoxShadow>[
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    options[i],
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: selected == values[i]
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      color: selected == values[i]
-                          ? cs.onSurface
-                          : cs.onSurface.withValues(alpha: 0.55),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionRow({
-    required IconData icon,
-    required String label,
-    required String hint,
-    required VoidCallback onTap,
-    bool danger = false,
-  }) {
-    final ColorScheme cs = Theme.of(context).colorScheme;
-    final Color color = danger ? cs.error : cs.onSurface;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(icon, size: 18, color: color.withValues(alpha: 0.7)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      color: danger ? cs.error : cs.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    hint,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.45,
-                      color: cs.onSurface.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      inputFormatters: formatters,
+      style: const TextStyle(fontSize: 13.5),
+      decoration: InputDecoration(
+        isDense: true,
+        filled: false,
+        hintText: hint,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
       ),
     );
   }
@@ -1091,8 +856,11 @@ class _SettingsPageState extends State<SettingsPage> {
               constraints: const BoxConstraints(maxHeight: 150),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(10),
+                color: Theme.of(ctx)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.05),
+                borderRadius: AppTokens.brSm,
               ),
               child: SingleChildScrollView(
                 child: SelectableText(
@@ -1182,7 +950,8 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(s.delete, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+            child: Text(s.delete,
+                style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
           ),
         ],
       ),
@@ -1193,8 +962,378 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
-class _Gap extends StatelessWidget {
-  const _Gap();
+/// A labelled block of rows on one card, separated by hairlines.
+class _Group extends StatelessWidget {
+  const _Group({this.title, this.note, required this.children});
+
+  final String? title;
+  final String? note;
+  final List<Widget> children;
+
   @override
-  Widget build(BuildContext context) => const SizedBox(height: 12);
+  Widget build(BuildContext context) {
+    final AppPalette p = AppPalette.of(context);
+    final List<Widget> rows = <Widget>[];
+    for (int i = 0; i < children.length; i++) {
+      if (i > 0) {
+        rows.add(Divider(
+          height: 0.8,
+          thickness: 0.8,
+          indent: 14,
+          endIndent: 14,
+          color: p.line,
+        ));
+      }
+      rows.add(children[i]);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (title != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 22, 2, 8),
+            child: Text(
+              title!,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                color: p.textTertiary,
+              ),
+            ),
+          )
+        else
+          const SizedBox(height: 10),
+        SolidCard(
+          radius: AppTokens.rLg,
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        ),
+        if (note != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+            child: Text(
+              note!,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.5,
+                color: p.textTertiary.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Navigation / toggle row. 48dp minimum, chevron only when it leads somewhere.
+class _Tile extends StatelessWidget {
+  const _Tile({
+    required this.label,
+    this.sub,
+    this.icon,
+    this.trailing,
+    this.bottom,
+    this.onTap,
+    this.danger = false,
+    this.alignTop = false,
+  });
+
+  final String label;
+  final String? sub;
+  final IconData? icon;
+  final Widget? trailing;
+  final Widget? bottom;
+  final VoidCallback? onTap;
+  final bool danger;
+
+  /// Keeps a trailing value on the first line instead of centring it against a
+  /// multi-line subtitle (the version number next to the disclaimer).
+  final bool alignTop;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = AppPalette.of(context);
+    final ColorScheme cs = Theme.of(context).colorScheme;
+    final Color tint = danger ? cs.error : p.textSecondary;
+
+    final Widget row = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: onTap == null ? 0 : AppTokens.tapTarget),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(14, bottom == null ? 11 : 12, 8, 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment:
+                  alignTop ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+              children: <Widget>[
+                if (icon != null) ...<Widget>[
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: (danger ? cs.error : cs.primary)
+                          .withValues(alpha: 0.10),
+                      borderRadius: AppTokens.brXs,
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 15,
+                      color: danger
+                          ? cs.error
+                          : cs.primary.withValues(alpha: 0.95),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.3,
+                          color: danger ? cs.error : p.text,
+                        ),
+                      ),
+                      if (sub != null && sub!.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 2),
+                        Text(
+                          sub!,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.45,
+                            color: p.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...<Widget>[
+                  const SizedBox(width: 10),
+                  if (alignTop)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: trailing!,
+                    )
+                  else
+                    trailing!,
+                ],
+                if (onTap != null) ...<Widget>[
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 17,
+                    color: p.textTertiary.withValues(alpha: 0.8),
+                  ),
+                ],
+              ],
+            ),
+            if (bottom != null) bottom!,
+          ],
+        ),
+      ),
+    );
+
+    if (onTap == null) return row;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppTokens.brMd,
+        splashColor: tint.withValues(alpha: 0.06),
+        highlightColor: tint.withValues(alpha: 0.04),
+        child: row,
+      ),
+    );
+  }
+}
+
+/// Label + control, stacked. Used for segmented switches and text inputs.
+class _FieldTile extends StatelessWidget {
+  const _FieldTile({required this.label, required this.child, this.note});
+
+  final String label;
+  final Widget child;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = AppPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            label,
+            style: TextStyle(fontSize: 11.5, color: p.textTertiary),
+          ),
+          const SizedBox(height: 7),
+          child,
+          if (note != null) ...<Widget>[
+            const SizedBox(height: 8),
+            Text(
+              note!,
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1.5,
+                color: p.textTertiary.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Seg extends StatelessWidget {
+  const _Seg({
+    required this.options,
+    required this.values,
+    required this.selected,
+    required this.onPick,
+  });
+
+  final List<String> options;
+  final List<String> values;
+  final String selected;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = AppPalette.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      // Clip so the selected pill's shadow can never bleed past the track's
+      // rounded corner — without it the last segment looks sliced off.
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: p.isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.black.withValues(alpha: 0.045),
+        borderRadius: AppTokens.brSm,
+      ),
+      child: Row(
+        children: <Widget>[
+          for (int i = 0; i < options.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onPick(values[i]),
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: AppTokens.fast,
+                  curve: AppTokens.emphasized,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected == values[i]
+                        ? (p.isDark
+                            ? const Color(0xFF2A313C)
+                            : Colors.white)
+                        : Colors.transparent,
+                    borderRadius: AppTokens.brXs,
+                    boxShadow: selected == values[i]
+                        ? <BoxShadow>[
+                            BoxShadow(
+                              color: Colors.black
+                                  .withValues(alpha: p.isDark ? 0.28 : 0.07),
+                              blurRadius: 5,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    options[i],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: selected == values[i]
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: selected == values[i]
+                          ? p.text
+                          : p.textSecondary.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = AppPalette.of(context);
+    final ColorScheme cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? cs.primary.withValues(alpha: 0.11) : null,
+          borderRadius: AppTokens.brPill,
+          border: Border.all(
+            color: active
+                ? cs.primary.withValues(alpha: 0.42)
+                : p.lineStrong,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+            color: active ? cs.primary : p.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Material switches are 52dp wide with a 48dp tap box; this trims both so the
+/// row keeps a single line and the label still gets the space.
+class _MiniSwitch extends StatelessWidget {
+  const _MiniSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.scale(
+      scale: 0.86,
+      child: Switch(
+        value: value,
+        onChanged: onChanged,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
 }

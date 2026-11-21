@@ -51,9 +51,10 @@ android {
 
     defaultConfig {
         applicationId "ai.zcode.zcode_mobile"
-        // 23 (Android 6) is the floor for Shizuku's provider and for the
-        // settings/DND APIs the automation uses; 5.x is not a target device.
-        minSdk 23
+        // Follows Flutter's own floor (API 24 since 3.50). Shizuku's provider
+        // and the settings/DND APIs the automation needs are all <= 24, so
+        // this is simply the lowest version we can still build for.
+        minSdkVersion flutter.minSdkVersion
         targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

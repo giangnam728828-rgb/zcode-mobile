@@ -10,6 +10,7 @@ import '../models/attachment.dart';
 import '../platform/device_bridge.dart';
 import '../services/workspace.dart';
 import '../state/app_state.dart';
+import '../widgets/glass_header.dart';
 import 'workspace_picker_page.dart';
 
 /// Workspace browser: the phone-side equivalent of the desktop file tree.
@@ -109,62 +110,6 @@ class _FilesPageState extends State<FilesPage> {
 
     return Scaffold(
       backgroundColor: widget.embedded ? Colors.transparent : null,
-      appBar: AppBar(
-        automaticallyImplyLeading: !widget.embedded,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(en ? 'Workspace' : '工作区文件'),
-            Text(
-              '${WorkspaceResolver.label(_absolute)}  ·  $_displayPath',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w400,
-                color: cs.onSurface.withValues(alpha: 0.42),
-              ),
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: en ? 'Switch workspace folder' : '切换工作区文件夹',
-            icon: const Icon(Icons.drive_folder_upload_outlined, size: 20),
-            onPressed: _changeWorkspace,
-          ),
-          IconButton(
-            tooltip: en ? 'Open with another app' : '用其他应用打开',
-            icon: const Icon(Icons.open_in_new_rounded, size: 19),
-            onPressed: () async {
-              final bool ok = await DeviceBridge.openPath(_absolute);
-              if (!ok && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(en ? 'No app can open it' : '没有可打开它的应用')),
-                );
-              }
-            },
-          ),
-          IconButton(
-            tooltip: en ? 'Hidden files' : '显示隐藏文件',
-            icon: Icon(
-              _showHidden
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_outlined,
-              size: 20,
-            ),
-            onPressed: () {
-              setState(() => _showHidden = !_showHidden);
-              _load();
-            },
-          ),
-          IconButton(
-            tooltip: en ? 'Refresh' : '刷新',
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: _load,
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton(
         mini: false,
         onPressed: _createSheet,
@@ -172,6 +117,61 @@ class _FilesPageState extends State<FilesPage> {
       ),
       body: Column(
         children: <Widget>[
+          GlassHeader(
+            embedded: widget.embedded,
+            leading: widget.embedded ? null : const BackButton(),
+            title: en ? 'Workspace' : '工作区文件',
+            subtitle: Text(
+              '${WorkspaceResolver.label(_absolute)}  ·  $_displayPath',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+            actions: <Widget>[
+              HeaderAction(
+                icon: Icons.drive_folder_upload_outlined,
+                tooltip: en ? 'Switch workspace folder' : '切换工作区文件夹',
+                onTap: _changeWorkspace,
+              ),
+              HeaderMenu(
+                tooltip: en ? 'More' : '更多',
+                items: <HeaderMenuItem>[
+                  HeaderMenuItem(
+                    _showHidden
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_outlined,
+                    en ? 'Hidden files' : '显示隐藏文件',
+                    () {
+                      setState(() => _showHidden = !_showHidden);
+                      _load();
+                    },
+                  ),
+                  HeaderMenuItem(
+                    Icons.refresh_rounded,
+                    en ? 'Refresh' : '刷新',
+                    _load,
+                  ),
+                  HeaderMenuItem(
+                    Icons.open_in_new_rounded,
+                    en ? 'Open with another app' : '用其他应用打开',
+                    () async {
+                      final ScaffoldMessengerState messenger =
+                          ScaffoldMessenger.of(context);
+                      final bool ok = await DeviceBridge.openPath(_absolute);
+                      if (!ok) {
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                en ? 'No app can open it' : '没有可打开它的应用'),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
           _breadcrumb(cs, en),
           if (DeviceBridge.isAndroid && !app.storageAccess)
             _storageBanner(cs, en),

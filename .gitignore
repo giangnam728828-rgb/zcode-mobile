@@ -50,3 +50,6 @@ app.*.map.json
 /android/app/*.jks
 /android/app/*.keystore
 /android/local.properties
+
+# Gradle project-level build output (reports, etc.)
+/android/build/

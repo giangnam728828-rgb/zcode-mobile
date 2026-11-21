@@ -7,6 +7,7 @@ import '../agent/tools.dart';
 import '../l10n/strings.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
+import '../theme/tokens.dart';
 import 'markdown_text.dart';
 import 'tool_card.dart';
 
@@ -47,9 +48,20 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
+    final AppPalette p = AppPalette.of(context);
     final bool dark = theme.brightness == Brightness.dark;
 
     if (message.isUser) {
+      // Light mode gets a plain white bubble on the grey backdrop: tinting the
+      // accent into every user turn made the transcript look like a highlight
+      // reel. Dark mode keeps a trace of accent because pure grey on near-black
+      // has no edge.
+      final Color fill = dark
+          ? cs.primary.withValues(alpha: 0.16)
+          : p.surface;
+      final Color edge = dark
+          ? cs.primary.withValues(alpha: 0.26)
+          : p.line;
       return Padding(
         padding: const EdgeInsets.fromLTRB(44, 8, 12, 8),
         child: Column(
@@ -59,20 +71,16 @@ class MessageBubble extends StatelessWidget {
               onTap: () => _showActions(context),
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 decoration: BoxDecoration(
-                  color: dark
-                      ? cs.primary.withValues(alpha: 0.20)
-                      : cs.primary.withValues(alpha: 0.10),
+                  color: fill,
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
-                    bottomLeft: Radius.circular(18),
-                    bottomRight: Radius.circular(5),
+                    topLeft: Radius.circular(AppTokens.rLg),
+                    topRight: Radius.circular(AppTokens.rLg),
+                    bottomLeft: Radius.circular(AppTokens.rLg),
+                    bottomRight: Radius.circular(AppTokens.rXs),
                   ),
-                  border: Border.all(
-                    color: cs.primary.withValues(alpha: dark ? 0.28 : 0.16),
-                  ),
+                  border: Border.all(color: edge, width: 0.8),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -89,7 +97,7 @@ class MessageBubble extends StatelessWidget {
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontSize: 15,
                           height: 1.55,
-                          color: cs.onSurface,
+                          color: p.text,
                         ),
                       ),
                   ],
@@ -116,13 +124,13 @@ class MessageBubble extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
-                  color: cs.onSurface.withValues(alpha: 0.62),
+                  color: p.textSecondary,
                   letterSpacing: 0.2,
                 ),
               ),
               if (message.stopped) ...<Widget>[
                 const SizedBox(width: 8),
-                _Tag(label: s.stopped, color: cs.onSurface.withValues(alpha: 0.5)),
+                _Tag(label: s.stopped, color: p.textTertiary),
               ],
             ],
           ),
@@ -147,7 +155,7 @@ class MessageBubble extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: cs.error.withValues(alpha: dark ? 0.14 : 0.07),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppTokens.brSm,
                 border: Border.all(color: cs.error.withValues(alpha: 0.28)),
               ),
               child: Column(

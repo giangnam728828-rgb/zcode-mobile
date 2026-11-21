@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../agent/tools.dart';
+import '../theme/tokens.dart';
 
 /// Compact transcript card for one tool invocation: what ran, whether it
 /// succeeded, and the output behind a tap. `todo_write` gets a checklist
@@ -26,7 +27,7 @@ class _ToolCardState extends State<ToolCard> {
     }
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
-    final bool dark = theme.brightness == Brightness.dark;
+    final AppPalette p = AppPalette.of(context);
 
     final Color tint;
     final IconData icon;
@@ -44,7 +45,7 @@ class _ToolCardState extends State<ToolCard> {
         icon = Icons.error_outline_rounded;
         break;
       case ToolStatus.denied:
-        tint = cs.onSurface.withValues(alpha: 0.45);
+        tint = p.textTertiary;
         icon = Icons.block_rounded;
         break;
       default:
@@ -57,20 +58,18 @@ class _ToolCardState extends State<ToolCard> {
     final String detail = c.subtitle;
 
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: AppTokens.s2),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF151A21) : const Color(0xFFF7F8FA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: dark ? const Color(0xFF232A33) : const Color(0xFFE6E9EF),
-        ),
+        color: p.surfaceRaised,
+        borderRadius: AppTokens.brSm,
+        border: Border.all(color: p.line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           InkWell(
             onTap: body.isEmpty ? null : () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: AppTokens.brSm,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
               child: Row(
@@ -82,7 +81,7 @@ class _ToolCardState extends State<ToolCard> {
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: tint.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
+                      borderRadius: AppTokens.brXs,
                     ),
                     child: Text(
                       label,
@@ -106,7 +105,7 @@ class _ToolCardState extends State<ToolCard> {
                           style: TextStyle(
                             fontSize: 12,
                             fontFamily: 'monospace',
-                            color: cs.onSurface.withValues(alpha: 0.8),
+                            color: p.text.withValues(alpha: 0.88),
                           ),
                         ),
                         if (detail.isNotEmpty && !_open)
@@ -119,7 +118,7 @@ class _ToolCardState extends State<ToolCard> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 height: 1.3,
-                                color: cs.onSurface.withValues(alpha: 0.38),
+                                color: p.textTertiary,
                               ),
                             ),
                           ),
@@ -133,7 +132,7 @@ class _ToolCardState extends State<ToolCard> {
                         _duration(c.duration!),
                         style: TextStyle(
                           fontSize: 10,
-                          color: cs.onSurface.withValues(alpha: 0.3),
+                          color: p.textTertiary,
                         ),
                       ),
                     ),
@@ -143,7 +142,7 @@ class _ToolCardState extends State<ToolCard> {
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
                       size: 18,
-                      color: cs.onSurface.withValues(alpha: 0.35),
+                      color: p.textTertiary,
                     ),
                 ],
               ),
@@ -155,9 +154,11 @@ class _ToolCardState extends State<ToolCard> {
               constraints: const BoxConstraints(maxHeight: 300),
               margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               padding: const EdgeInsets.fromLTRB(10, 6, 6, 8),
+              // A console is the one surface that stays dark in both themes:
+              // it is a terminal, not a card.
               decoration: BoxDecoration(
-                color: dark ? const Color(0xFF0C1014) : const Color(0xFF10141A),
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFF0C1014),
+                borderRadius: AppTokens.brXs,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,20 +236,18 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
-    final bool dark = theme.brightness == Brightness.dark;
+    final AppPalette p = AppPalette.of(context);
     final List<TodoEntry> items = call.todos;
     final int done = items.where((TodoEntry t) => t.done).length;
     final double ratio = items.isEmpty ? 0 : done / items.length;
 
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: AppTokens.s2),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF141820) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: dark ? const Color(0xFF242C37) : const Color(0xFFE4E8EF),
-        ),
+        color: p.surfaceRaised,
+        borderRadius: AppTokens.brSm,
+        border: Border.all(color: p.line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -263,7 +262,7 @@ class _PlanCard extends StatelessWidget {
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.2,
-                  color: cs.onSurface.withValues(alpha: 0.7),
+                  color: p.textSecondary,
                 ),
               ),
               const Spacer(),
@@ -271,7 +270,7 @@ class _PlanCard extends StatelessWidget {
                 '$done/${items.length}',
                 style: TextStyle(
                   fontSize: 10.5,
-                  color: cs.onSurface.withValues(alpha: 0.38),
+                  color: p.textTertiary,
                 ),
               ),
             ],
@@ -282,7 +281,7 @@ class _PlanCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: ratio,
               minHeight: 3,
-              backgroundColor: cs.onSurface.withValues(alpha: 0.07),
+              backgroundColor: p.line,
               valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
             ),
           ),
@@ -306,7 +305,7 @@ class _PlanCard extends StatelessWidget {
                           ? const Color(0xFF12A67A)
                           : (t.active
                               ? cs.primary
-                              : cs.onSurface.withValues(alpha: 0.28)),
+                              : p.textTertiary.withValues(alpha: 0.7)),
                     ),
                   ),
                   const SizedBox(width: 7),
@@ -317,11 +316,11 @@ class _PlanCard extends StatelessWidget {
                         fontSize: 12.5,
                         height: 1.45,
                         color: t.done
-                            ? cs.onSurface.withValues(alpha: 0.42)
-                            : cs.onSurface.withValues(alpha: 0.82),
+                            ? p.textTertiary
+                            : p.text.withValues(alpha: 0.9),
                         decoration:
                             t.done ? TextDecoration.lineThrough : null,
-                        decorationColor: cs.onSurface.withValues(alpha: 0.3),
+                        decorationColor: p.textTertiary,
                       ),
                     ),
                   ),
