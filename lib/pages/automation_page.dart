@@ -209,10 +209,11 @@ class _AutomationPageState extends State<AutomationPage> {
         final ColorScheme cs = Theme.of(ctx).colorScheme;
         return AlertDialog(
           title: const Text('一句话建规则', style: TextStyle(fontSize: 16)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
               TextField(
                 controller: controller,
                 autofocus: true,
@@ -254,6 +255,7 @@ class _AutomationPageState extends State<AutomationPage> {
                   style: TextStyle(
                       fontSize: 10.5, color: cs.onSurface.withOpacity(0.45))),
             ],
+            ),
           ),
           actions: <Widget>[
             TextButton(
