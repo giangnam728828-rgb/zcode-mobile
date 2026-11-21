@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Accessibility config for ZCode.
+
+  window state changes give us "which app is in front" and the screen text
+  snapshot; content changes keep a rule like "屏幕出现构建成功" honest. Flags are
+  kept to the stable ones so the service also loads on Android 6.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeNotificationStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/a11y_description"
+    android:notificationTimeout="120"
+    android:settingsActivity="ai.zcode.zcode_mobile.MainActivity" />

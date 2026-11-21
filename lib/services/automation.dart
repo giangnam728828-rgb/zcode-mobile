@@ -17,7 +17,8 @@ class AutomationTrigger {
 
   /// Time-of-day triggers need a minute of tolerance; everything else is level
   /// based and gets re-armed when the condition goes away.
-  bool get isClock => kind == 'interval' || kind == 'daily';
+  bool get isClock =>
+      kind == 'interval' || kind == 'daily' || kind == 'idle';
 
   Map<String, dynamic> toJson() => <String, dynamic>{'kind': kind, 'args': args};
 
@@ -80,6 +81,26 @@ class AutomationTrigger {
         return '解锁手机';
       case 'boot':
         return '开机后首次打开';
+      case 'battery_full':
+        return '电量充满';
+      case 'idle':
+        final int m = (args['minutes'] as num?)?.toInt() ?? 30;
+        return '息屏 $m 分钟后';
+      case 'app_foreground':
+        final String label = '${args['label'] ?? ''}';
+        final String pkg = '${args['package'] ?? ''}';
+        final String name = label.isNotEmpty ? label : pkg;
+        return name.isEmpty ? '打开任意应用' : '打开「$name」时';
+      case 'notification':
+        final String app = '${args['app'] ?? ''}';
+        final String key = '${args['keyword'] ?? ''}';
+        if (key.isNotEmpty) {
+          return app.isEmpty ? '通知含「$key」' : '「$app」通知含「$key」';
+        }
+        return app.isEmpty ? '收到任意通知' : '收到「$app」通知';
+      case 'screen_text':
+        final String t = '${args['text'] ?? ''}';
+        return t.isEmpty ? '屏幕文字变化' : '屏幕出现「$t」';
       case 'manual':
       default:
         return '仅手动运行';
@@ -123,6 +144,18 @@ class AutomationAction {
         return '设备：${DeviceAction.label('${args['action'] ?? ''}')}';
       case 'webhook':
         return '请求：${args['url'] ?? ''}';
+      case 'a11y':
+        return '屏幕：${A11yAction.label('${args['op'] ?? ''}')}'
+            '${'${args['text'] ?? ''}'.isEmpty ? '' : '「${args['text']}」'}';
+      case 'speak':
+        final String s = '${args['text'] ?? ''}'.replaceAll('\n', ' ');
+        return '朗读：${s.length > 30 ? '${s.substring(0, 30)}…' : s}';
+      case 'clipboard':
+        return '复制到剪贴板';
+      case 'open_app':
+        return '打开应用：${args['package'] ?? ''}';
+      case 'delay':
+        return '等待 ${(args['seconds'] as num?)?.toInt() ?? 5} 秒';
       default:
         return kind;
     }
@@ -245,6 +278,13 @@ class AutomationSignal {
     this.ssid = '',
     this.screenOn = true,
     this.booted = false,
+    this.foreground = '',
+    this.foregroundLabel = '',
+    this.notifPackage = '',
+    this.notifApp = '',
+    this.notifTitle = '',
+    this.notifText = '',
+    this.screenText = '',
   });
 
   final int batteryLevel;
@@ -253,6 +293,88 @@ class AutomationSignal {
   final String ssid;
   final bool screenOn;
   final bool booted;
+
+  /// Package and label of the app that just came to the front.
+  final String foreground;
+  final String foregroundLabel;
+
+  /// Last notification seen by the listener.
+  final String notifPackage;
+  final String notifApp;
+  final String notifTitle;
+  final String notifText;
+
+  /// Text of the most recent screen snapshot taken by the a11y service.
+  final String screenText;
+
+  AutomationSignal copyWith({
+    int? batteryLevel,
+    bool? charging,
+    bool? wifi,
+    String? ssid,
+    bool? screenOn,
+    bool? booted,
+    String? foreground,
+    String? foregroundLabel,
+    String? notifPackage,
+    String? notifApp,
+    String? notifTitle,
+    String? notifText,
+    String? screenText,
+  }) {
+    return AutomationSignal(
+      batteryLevel: batteryLevel ?? this.batteryLevel,
+      charging: charging ?? this.charging,
+      wifi: wifi ?? this.wifi,
+      ssid: ssid ?? this.ssid,
+      screenOn: screenOn ?? this.screenOn,
+      booted: booted ?? this.booted,
+      foreground: foreground ?? this.foreground,
+      foregroundLabel: foregroundLabel ?? this.foregroundLabel,
+      notifPackage: notifPackage ?? this.notifPackage,
+      notifApp: notifApp ?? this.notifApp,
+      notifTitle: notifTitle ?? this.notifTitle,
+      notifText: notifText ?? this.notifText,
+      screenText: screenText ?? this.screenText,
+    );
+  }
+}
+
+/// Screen operations that run through the accessibility service instead of a
+/// shell. They work without root, which is the whole point.
+class A11yAction {
+  const A11yAction(this.id, this.zh, this.en);
+
+  final String id;
+  final String zh;
+  final String en;
+
+  static const List<A11yAction> all = <A11yAction>[
+    A11yAction('read', '读取屏幕文字', 'Read screen'),
+    A11yAction('click', '按文字点击', 'Tap text'),
+    A11yAction('long_click', '长按文字', 'Long-press text'),
+    A11yAction('input', '输入文字', 'Type text'),
+    A11yAction('scroll_down', '向下滚动', 'Scroll down'),
+    A11yAction('scroll_up', '向上滚动', 'Scroll up'),
+    A11yAction('back', '返回键', 'Back'),
+    A11yAction('home', '回到桌面', 'Home'),
+    A11yAction('recents', '最近任务', 'Recents'),
+    A11yAction('notifications', '拉下通知栏', 'Notification shade'),
+    A11yAction('screenshot', '系统截屏', 'Screenshot'),
+    A11yAction('lock', '锁屏', 'Lock'),
+  ];
+
+  static String label(String id) {
+    for (final A11yAction a in all) {
+      if (a.id == id) return a.zh;
+    }
+    return id.isEmpty ? '未选择' : id;
+  }
+
+  static bool needsText(String id) =>
+      id == 'click' || id == 'long_click' || id == 'input';
+
+  static bool needsValue(String id) => id == 'input';
 }
 
 /// Human labels and the shell a device action turns into. Kept in one place so
@@ -284,7 +406,24 @@ class DeviceAction {
     DeviceAction('force_stop', '强制停止应用', 'Force-stop app'),
     DeviceAction('clear_recents', '清空最近任务', 'Clear recents'),
     DeviceAction('stay_awake', '充电时保持唤醒', 'Stay awake while charging'),
+    DeviceAction('volume_up', '音量加一格', 'Volume up'),
+    DeviceAction('volume_down', '音量减一格', 'Volume down'),
+    DeviceAction('mute', '静音', 'Mute'),
+    DeviceAction('media_play', '播放 / 暂停', 'Play or pause'),
+    DeviceAction('media_next', '下一首', 'Next track'),
+    DeviceAction('media_prev', '上一首', 'Previous track'),
+    DeviceAction('dark_on', '深色模式开', 'Dark mode on'),
+    DeviceAction('dark_off', '深色模式关', 'Dark mode off'),
+    DeviceAction('screen_off', '直接息屏', 'Screen off'),
   ];
+
+  /// Actions implemented by a native call rather than a shell line. They work
+  /// on an unrooted phone, so no privilege flag is attached.
+  static const Set<String> native = <String>{
+    'volume_up',
+    'volume_down',
+    'mute',
+  };
 
   static String label(String id) {
     for (final DeviceAction a in all) {
@@ -313,6 +452,12 @@ class DeviceAction {
       'force_stop',
       'clear_recents',
       'stay_awake',
+      'media_play',
+      'media_next',
+      'media_prev',
+      'dark_on',
+      'dark_off',
+      'screen_off',
     };
     return needs.contains(id);
   }
@@ -360,6 +505,23 @@ class DeviceAction {
         return 'am kill-all';
       case 'stay_awake':
         return 'svc power stayon true';
+      case 'media_play':
+        return 'input keyevent 85';
+      case 'media_next':
+        return 'input keyevent 87';
+      case 'media_prev':
+        return 'input keyevent 88';
+      case 'dark_on':
+        return 'cmd uimode night yes';
+      case 'dark_off':
+        return 'cmd uimode night no';
+      case 'screen_off':
+        return 'input keyevent 223';
+      case 'volume_up':
+      case 'volume_down':
+      case 'mute':
+        // Handled by AudioManager through the bridge, no shell needed.
+        return '';
       case 'screenshot':
       default:
         return '';
@@ -475,81 +637,61 @@ class AutomationEngine extends ChangeNotifier {
   }
 
   /// Feeds a raw event from the native stream (`screen_on`, `unlock`,
-  /// `wifi_connected`, `battery`, `power_connected`, …).
+  /// `wifi_connected`, `battery`, `app_foreground`, `notification`, `screen`, …).
   Future<void> onEvent(Map<String, dynamic> event) async {
     final String type = '${event['type'] ?? ''}';
     if (type.isEmpty) return;
     switch (type) {
       case 'battery':
-        _signal = AutomationSignal(
-          batteryLevel: (event['level'] as num?)?.toInt() ?? _signal.batteryLevel,
+        _signal = _signal.copyWith(
+          batteryLevel: (event['level'] as num?)?.toInt(),
           charging: event['charging'] == true,
-          wifi: _signal.wifi,
-          ssid: _signal.ssid,
-          screenOn: _signal.screenOn,
-          booted: _signal.booted,
         );
         break;
       case 'power_connected':
-        _signal = AutomationSignal(
-          batteryLevel: _signal.batteryLevel,
-          charging: true,
-          wifi: _signal.wifi,
-          ssid: _signal.ssid,
-          screenOn: _signal.screenOn,
-          booted: _signal.booted,
-        );
+        _signal = _signal.copyWith(charging: true);
         break;
       case 'power_disconnected':
-        _signal = AutomationSignal(
-          batteryLevel: _signal.batteryLevel,
-          charging: false,
-          wifi: _signal.wifi,
-          ssid: _signal.ssid,
-          screenOn: _signal.screenOn,
-          booted: _signal.booted,
-        );
+        _signal = _signal.copyWith(charging: false);
         break;
       case 'wifi_connected':
-        _signal = AutomationSignal(
-          batteryLevel: _signal.batteryLevel,
-          charging: _signal.charging,
-          wifi: true,
-          ssid: '${event['ssid'] ?? ''}',
-          screenOn: _signal.screenOn,
-          booted: _signal.booted,
-        );
+        _signal = _signal.copyWith(wifi: true, ssid: '${event['ssid'] ?? ''}');
         break;
       case 'wifi_disconnected':
-        _signal = AutomationSignal(
-          batteryLevel: _signal.batteryLevel,
-          charging: _signal.charging,
-          wifi: false,
-          ssid: '',
-          screenOn: _signal.screenOn,
-          booted: _signal.booted,
-        );
+        _signal = _signal.copyWith(wifi: false, ssid: '');
         break;
       case 'screen_on':
-        _signal = AutomationSignal(
-          batteryLevel: _signal.batteryLevel,
-          charging: _signal.charging,
-          wifi: _signal.wifi,
-          ssid: _signal.ssid,
-          screenOn: true,
-          booted: _signal.booted,
-        );
+        _signal = _signal.copyWith(screenOn: true);
         break;
       case 'screen_off':
-        _signal = AutomationSignal(
-          batteryLevel: _signal.batteryLevel,
-          charging: _signal.charging,
-          wifi: _signal.wifi,
-          ssid: _signal.ssid,
-          screenOn: false,
-          booted: _signal.booted,
+        _signal = _signal.copyWith(screenOn: false);
+        break;
+      case 'app_foreground':
+        _signal = _signal.copyWith(
+          foreground: '${event['package'] ?? ''}',
+          foregroundLabel: '${event['label'] ?? ''}',
         );
         break;
+      case 'notification':
+        _signal = _signal.copyWith(
+          notifPackage: '${event['package'] ?? ''}',
+          notifApp: '${event['app'] ?? ''}',
+          notifTitle: '${event['title'] ?? ''}',
+          notifText: '${event['text'] ?? ''}',
+        );
+        break;
+      case 'screen':
+        _signal = _signal.copyWith(
+          screenText: '${event['text'] ?? ''}',
+          foreground: '${event['package'] ?? _signal.foreground}',
+          foregroundLabel: '${event['app'] ?? _signal.foregroundLabel}',
+        );
+        break;
+      case 'notification_listener':
+      case 'a11y_connected':
+      case 'a11y_disconnected':
+        notifyListeners();
+        return;
     }
     await _fireEvent(type);
     notifyListeners();
@@ -603,6 +745,53 @@ class AutomationEngine extends ChangeNotifier {
         return !signal.wifi;
       case 'screen_on':
         return signal.screenOn;
+      case 'battery_full':
+        return signal.charging && signal.batteryLevel >= 99;
+      case 'idle':
+        final int minutes = (t.args['minutes'] as num?)?.toInt() ?? 30;
+        if (signal.screenOn) return false;
+        if (minutes <= 0) return false;
+        final DateTime? idleLast = rule.lastRun;
+        return idleLast == null || now.difference(idleLast).inMinutes >= minutes;
+      case 'app_foreground':
+        final String pkg = '${t.args['package'] ?? ''}'.toLowerCase();
+        final String label = '${t.args['label'] ?? ''}'.toLowerCase();
+        final String fg = signal.foreground.toLowerCase();
+        final String fgLabel = signal.foregroundLabel.toLowerCase();
+        if (fg.isEmpty && fgLabel.isEmpty) return false;
+        if (pkg.isEmpty && label.isEmpty) {
+          // "any app" would otherwise fire on every transition; two minutes
+          // between runs is a sensible floor.
+          final DateTime? anyLast = rule.lastRun;
+          return anyLast == null || now.difference(anyLast).inMinutes >= 2;
+        }
+        final bool packageHit = pkg.isNotEmpty && fg.contains(pkg);
+        final bool labelHit =
+            label.isNotEmpty && (fgLabel.contains(label) || fg.contains(label));
+        if (!packageHit && !labelHit) return false;
+        final DateTime? appLast = rule.lastRun;
+        return appLast == null || now.difference(appLast).inSeconds >= 45;
+      case 'notification':
+        if (signal.notifApp.isEmpty && signal.notifPackage.isEmpty) return false;
+        final String app = '${t.args['app'] ?? ''}'.toLowerCase();
+        if (app.isNotEmpty) {
+          final String hay =
+              '${signal.notifApp} ${signal.notifPackage}'.toLowerCase();
+          if (!hay.contains(app)) return false;
+        }
+        final String key = '${t.args['keyword'] ?? ''}'.toLowerCase();
+        if (key.isNotEmpty) {
+          final String body =
+              '${signal.notifTitle} ${signal.notifText}'.toLowerCase();
+          if (!body.contains(key)) return false;
+        }
+        return true;
+      case 'screen_text':
+        final String needle = '${t.args['text'] ?? ''}'.toLowerCase();
+        if (needle.isEmpty) return signal.screenText.isNotEmpty;
+        if (!signal.screenText.toLowerCase().contains(needle)) return false;
+        final DateTime? textLast = rule.lastRun;
+        return textLast == null || now.difference(textLast).inSeconds >= 30;
       default:
         return false;
     }
@@ -641,6 +830,9 @@ class AutomationEngine extends ChangeNotifier {
       'wifi_off',
       'charging',
       'unplugged',
+      'app_foreground',
+      'notification',
+      'screen_text',
     };
     return events.contains(kind);
   }
@@ -654,7 +846,10 @@ class AutomationEngine extends ChangeNotifier {
           (kind == 'wifi_on' && type == 'wifi_connected') ||
           (kind == 'wifi_off' && type == 'wifi_disconnected') ||
           (kind == 'charging' && type == 'power_connected') ||
-          (kind == 'unplugged' && type == 'power_disconnected');
+          (kind == 'unplugged' && type == 'power_disconnected') ||
+          (kind == 'app_foreground' && type == 'app_foreground') ||
+          (kind == 'notification' && type == 'notification') ||
+          (kind == 'screen_text' && type == 'screen');
       if (!match) {
         _fired.remove(rule.id);
         continue;
@@ -866,5 +1061,431 @@ class AutomationTemplates {
           ],
           notify: false,
         ),
+        AutomationRule(
+          id: 'tpl-notify-boss',
+          name: '重要消息立刻提醒',
+          trigger: const AutomationTrigger('notification', <String, dynamic>{
+            'app': '',
+            'keyword': '',
+          }),
+          actions: <AutomationAction>[
+            const AutomationAction('vibrate', <String, dynamic>{'ms': 260}),
+            const AutomationAction('notify', <String, dynamic>{
+              'title': '{app} 来消息了',
+              'body': '{title}：{text}',
+            }),
+          ],
+          notify: false,
+        ),
+        AutomationRule(
+          id: 'tpl-code-copy',
+          name: '验证码自动进剪贴板',
+          trigger: const AutomationTrigger('notification', <String, dynamic>{
+            'app': '',
+            'keyword': '验证码',
+          }),
+          actions: <AutomationAction>[
+            const AutomationAction('clipboard', <String, dynamic>{
+              'text': '{text}',
+            }),
+            const AutomationAction('notify', <String, dynamic>{
+              'title': '验证码已复制',
+              'body': '{text}',
+            }),
+          ],
+          notify: false,
+        ),
+        AutomationRule(
+          id: 'tpl-wechat-checkin',
+          name: '微信自动打卡（按文字点）',
+          trigger: const AutomationTrigger('app_foreground', <String, dynamic>{
+            'package': 'com.tencent.mm',
+            'label': '微信',
+          }),
+          actions: <AutomationAction>[
+            const AutomationAction('delay', <String, dynamic>{'seconds': 3}),
+            const AutomationAction('a11y', <String, dynamic>{
+              'op': 'click',
+              'text': '打卡',
+            }),
+            const AutomationAction('notify', <String, dynamic>{
+              'title': '打卡',
+              'body': '在微信里找到了「打卡」并点了一下。',
+            }),
+          ],
+          notify: false,
+        ),
+        AutomationRule(
+          id: 'tpl-build-done',
+          name: '构建成功就播报',
+          trigger: const AutomationTrigger('screen_text', <String, dynamic>{
+            'text': '构建成功',
+          }),
+          actions: <AutomationAction>[
+            const AutomationAction('speak', <String, dynamic>{
+              'text': '构建完成了',
+            }),
+            const AutomationAction('vibrate', <String, dynamic>{'ms': 180}),
+          ],
+          notify: false,
+        ),
+        AutomationRule(
+          id: 'tpl-idle-notes',
+          name: '息屏半小时整理笔记',
+          trigger: const AutomationTrigger('idle', <String, dynamic>{
+            'minutes': 30,
+          }),
+          actions: <AutomationAction>[
+            const AutomationAction('agent', <String, dynamic>{
+              'prompt': '看一眼工作区里今天改动过的文件，把值得记的三条写进 '
+                  'notes/daily.md（没有就新建），最后回一句结论。',
+            }),
+          ],
+          notify: false,
+        ),
+        AutomationRule(
+          id: 'tpl-full-unplug',
+          name: '充满提醒拔电',
+          trigger: const AutomationTrigger('battery_full'),
+          actions: <AutomationAction>[
+            const AutomationAction('vibrate', <String, dynamic>{'ms': 400}),
+            const AutomationAction('notify', <String, dynamic>{
+              'title': '电池已充满',
+              'body': '拔掉充电器，别一直插着。',
+            }),
+          ],
+          notify: false,
+        ),
+        AutomationRule(
+          id: 'tpl-open-app-dnd',
+          name: '打开专注应用时静音',
+          trigger: const AutomationTrigger('app_foreground', <String, dynamic>{
+            'package': '',
+            'label': '',
+          }),
+          actions: <AutomationAction>[
+            const AutomationAction('device', <String, dynamic>{'action': 'mute'}),
+            const AutomationAction('notify', <String, dynamic>{
+              'title': '已静音',
+              'body': '打开了 {app}，顺手把媒体音量关掉了。',
+            }),
+          ],
+          notify: false,
+        ),
       ];
+}
+
+/// Turns one sentence into a rule.
+///
+/// The point is "less tapping", so the parser is deliberately local and
+/// forgiving: it looks for a trigger phrase, then for the actions the sentence
+/// implies. Everything it produces opens in the normal editor, so a wrong guess
+/// costs one correction rather than a failed automation.
+class AutomationDraft {
+  static AutomationRule parse(String raw) {
+    final String text = raw.trim();
+    final AutomationTrigger trigger = triggerOf(text);
+    return AutomationRule(
+      id: 'r${DateTime.now().microsecondsSinceEpoch}',
+      name: nameOf(text),
+      trigger: trigger,
+      actions: actionsOf(text, trigger),
+      notify: false,
+    );
+  }
+
+  static String nameOf(String text) {
+    final String clean = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.isEmpty) return '自定义规则';
+    return clean.length > 18 ? '${clean.substring(0, 18)}…' : clean;
+  }
+
+  static AutomationTrigger triggerOf(String text) {
+    final String t = text;
+    // Every N minutes / hours first: "每 30 分钟" also contains 每.
+    final RegExpMatch? everyMin =
+        RegExp(r'每\s*(\d+)\s*分钟', caseSensitive: false).firstMatch(t);
+    if (everyMin != null) {
+      return AutomationTrigger('interval', <String, dynamic>{
+        'minutes': int.tryParse(everyMin.group(1) ?? '') ?? 30,
+      });
+    }
+    final RegExpMatch? everyHour =
+        RegExp(r'每\s*(\d+)\s*(?:个)?小时', caseSensitive: false).firstMatch(t);
+    if (everyHour != null) {
+      return AutomationTrigger('interval', <String, dynamic>{
+        'minutes': (int.tryParse(everyHour.group(1) ?? '') ?? 1) * 60,
+      });
+    }
+    final RegExpMatch? clock = RegExp(
+      r'每(天|日|早|晚|周[一二三四五六日天])?\s*(\d{1,2})\s*[:：点时]\s*(\d{1,2})?',
+      caseSensitive: false,
+    ).firstMatch(t);
+    if (clock != null) {
+      final String head = (clock.group(1) ?? '').trim();
+      List<int> days = <int>[];
+      if (head.contains('工作日')) {
+        days = <int>[1, 2, 3, 4, 5];
+      } else if (head.contains('周末')) {
+        days = <int>[6, 7];
+      }
+      return AutomationTrigger('daily', <String, dynamic>{
+        'hour': int.tryParse(clock.group(2) ?? '') ?? 9,
+        'minute': int.tryParse(clock.group(3) ?? '') ?? 0,
+        'weekdays': days,
+      });
+    }
+    if (RegExp(r'工作日\s*(\d{1,2})\s*[:：点时]').hasMatch(t)) {
+      final RegExpMatch m =
+          RegExp(r'工作日\s*(\d{1,2})\s*[:：点时]\s*(\d{1,2})?').firstMatch(t)!;
+      return AutomationTrigger('daily', <String, dynamic>{
+        'hour': int.tryParse(m.group(1) ?? '') ?? 9,
+        'minute': int.tryParse(m.group(2) ?? '') ?? 0,
+        'weekdays': <int>[1, 2, 3, 4, 5],
+      });
+    }
+
+    final RegExpMatch? low =
+        RegExp(r'电量\s*(?:低于|少于|小于|不足)\s*(\d{1,3})').firstMatch(t);
+    if (low != null) {
+      return AutomationTrigger('battery_below', <String, dynamic>{
+        'level': int.tryParse(low.group(1) ?? '') ?? 20,
+      });
+    }
+    final RegExpMatch? high =
+        RegExp(r'电量\s*(?:高于|超过|大于)\s*(\d{1,3})').firstMatch(t);
+    if (high != null) {
+      return AutomationTrigger('battery_above', <String, dynamic>{
+        'level': int.tryParse(high.group(1) ?? '') ?? 80,
+      });
+    }
+    if (RegExp(r'充满|满电|充电完成|充到 100').hasMatch(t)) {
+      return const AutomationTrigger('battery_full');
+    }
+    if (RegExp(r'(拔掉|断开)\s*(电源|充电器|充电)').hasMatch(t)) {
+      return const AutomationTrigger('unplugged');
+    }
+    if (RegExp(r'(插上|接上|连上)\s*(电源|充电器|充电)').hasMatch(t)) {
+      return const AutomationTrigger('charging');
+    }
+
+    final RegExpMatch? wifi = RegExp(
+      r'(?:连上|连接|接入)\s*(?:家里的\s*)?(?:wifi|wi-fi|无线网|无线|网络)\s*[「"\x27]?([^」"\x27\s，。]{1,24})?',
+      caseSensitive: false,
+    ).firstMatch(t);
+    if (wifi != null) {
+      return AutomationTrigger('wifi_on', <String, dynamic>{
+        'ssid': _cleanSsid(wifi.group(1) ?? ''),
+      });
+    }
+    if (RegExp(r'(断开|掉线|离开)\s*(wifi|wi-fi|无线|网络)', caseSensitive: false)
+        .hasMatch(t)) {
+      return const AutomationTrigger('wifi_off');
+    }
+
+    final RegExpMatch? idle =
+        RegExp(r'(?:息屏|锁屏|黑屏|灭屏)\s*(\d+)\s*分钟').firstMatch(t);
+    if (idle != null) {
+      return AutomationTrigger('idle', <String, dynamic>{
+        'minutes': int.tryParse(idle.group(1) ?? '') ?? 30,
+      });
+    }
+
+    final RegExpMatch? screenText = RegExp(
+      r'屏幕(?:上)?(?:出现|显示)\s*[「"\x27]?([^」"\x27\n]{1,24})[」"\x27]?',
+    ).firstMatch(t);
+    if (screenText != null) {
+      return AutomationTrigger('screen_text', <String, dynamic>{
+        'text': (screenText.group(1) ?? '').trim(),
+      });
+    }
+
+    final RegExpMatch? notif = RegExp(
+      r'(?:收到|来|接到)\s*([^\s，。的]{1,12}?)\s*(?:的)?\s*(?:消息|通知|推送)',
+    ).firstMatch(t);
+    if (notif != null) {
+      String app = (notif.group(1) ?? '').trim();
+      final RegExpMatch? key = RegExp(
+        r'(?:含有?|带上?|包含)\s*[「"\x27]?([^」"\x27\s，。]{1,16})',
+      ).firstMatch(t);
+      String keyword = (key?.group(1) ?? '').trim();
+      // "收到验证码通知" is about the content, not the sender.
+      if (_keywordish(app)) {
+        if (keyword.isEmpty) keyword = app;
+        app = '';
+      }
+      return AutomationTrigger('notification', <String, dynamic>{
+        'app': app,
+        'keyword': keyword,
+      });
+    }
+
+    final RegExpMatch? app = RegExp(
+      r'打开\s*([^\s，。]{1,16}?)\s*(?:的)?\s*(?:时|后|的时候)',
+    ).firstMatch(t);
+    if (app != null) {
+      return AutomationTrigger('app_foreground', <String, dynamic>{
+        'package': '',
+        'label': (app.group(1) ?? '').trim(),
+      });
+    }
+
+    if (RegExp(r'解锁').hasMatch(t)) return const AutomationTrigger('unlock');
+    if (RegExp(r'开机').hasMatch(t)) return const AutomationTrigger('boot');
+    if (RegExp(r'点亮屏幕|亮屏').hasMatch(t)) {
+      return const AutomationTrigger('screen_on');
+    }
+    return const AutomationTrigger('manual');
+  }
+
+  static List<AutomationAction> actionsOf(
+    String text,
+    AutomationTrigger trigger,
+  ) {
+    final List<AutomationAction> out = <AutomationAction>[];
+    final String lower = text.toLowerCase();
+    bool has(String s) => lower.contains(s.toLowerCase());
+
+    if (has('git pull') || has('拉代码') || has('更新代码')) {
+      out.add(const AutomationAction('shell', <String, dynamic>{
+        'command': 'git pull --ff-only',
+        'mode': 'builtin',
+      }));
+    }
+    if (has('截屏') || has('截图')) {
+      out.add(const AutomationAction('device', <String, dynamic>{
+        'action': 'screenshot',
+      }));
+    }
+    if (has('调暗') || has('最低亮度') || has('降低亮度')) {
+      out.add(const AutomationAction('device', <String, dynamic>{
+        'action': 'brightness_low',
+      }));
+    }
+    if (has('静音')) {
+      out.add(const AutomationAction('device', <String, dynamic>{
+        'action': 'mute',
+      }));
+    }
+    if (has('勿扰')) {
+      out.add(const AutomationAction('device', <String, dynamic>{
+        'action': 'dnd_on',
+      }));
+    }
+    if (has('打卡')) {
+      out.add(const AutomationAction('a11y', <String, dynamic>{
+        'op': 'click',
+        'text': '打卡',
+      }));
+    }
+    if (has('复制') || has('剪贴板')) {
+      out.add(const AutomationAction('clipboard', <String, dynamic>{
+        'text': '{text}',
+      }));
+    }
+    final bool wantsSpeech =
+        has('朗读') || has('念一下') || has('播报') || has('读出来');
+    if (wantsSpeech) {
+      out.add(AutomationAction('speak', <String, dynamic>{
+        'text': _spoken(text),
+      }));
+    }
+    final bool wantsAgent = !wantsSpeech &&
+        (has('总结') ||
+            has('整理') ||
+            has('检查') ||
+            has('构建') ||
+            has('测试') ||
+            has('写') ||
+            has('跑一遍') ||
+            has('跑一次') ||
+            has('分析'));
+    if (wantsAgent) {
+      out.add(AutomationAction('agent', <String, dynamic>{'prompt': text}));
+    }
+    final bool wantsNotify =
+        has('通知') || has('提醒') || has('告诉我') || has('告我');
+    final bool copies = has('复制') || has('剪贴板');
+    if (wantsNotify && !wantsAgent && !copies) {
+      out.add(AutomationAction('notify', <String, dynamic>{
+        'title': nameOf(text),
+        'body': text,
+      }));
+    }
+    if (out.isEmpty) {
+      out.add(AutomationAction('notify', <String, dynamic>{
+        'title': nameOf(text),
+        'body': text,
+      }));
+    }
+    return out;
+  }
+
+  /// Strips instruction words so "连上 Wi-Fi 就 git pull" does not turn into an
+  /// SSID called "就".
+  static String _cleanSsid(String raw) {
+    String out = raw.trim();
+    const List<String> stop = <String>[
+      '就',
+      '时',
+      '后',
+      '然后',
+      '再',
+      '并',
+      '自动',
+      '以后',
+    ];
+    for (final String word in stop) {
+      if (out == word) return '';
+      if (out.startsWith(word)) {
+        out = out.substring(word.length).trim();
+      }
+    }
+    return out;
+  }
+
+  static bool _keywordish(String token) {
+    if (token.isEmpty) return false;
+    const List<String> words = <String>[
+      '验证码',
+      '短信',
+      '快递',
+      '外卖',
+      '消息',
+      '通知',
+      '推送',
+      '转账',
+      '账单',
+      '日程',
+      '会议',
+      '提醒',
+      '日程',
+      '告警',
+      '报警',
+      '失败',
+    ];
+    for (final String w in words) {
+      if (token.contains(w)) return true;
+    }
+    return false;
+  }
+
+  /// Strips the instruction words so a spoken sentence does not read like a
+  /// prompt ("朗读一下：构建完成" → "构建完成").
+  static String _spoken(String text) {
+    String out = text;
+    for (final String lead in <String>[
+      '朗读一下',
+      '朗读',
+      '念一下',
+      '念',
+      '播报一下',
+      '播报',
+      '读出来',
+    ]) {
+      out = out.replaceAll(lead, '');
+    }
+    out = out.replaceAll(RegExp(r'^[:：，,\s]+'), '').trim();
+    return out.isEmpty ? text : out;
+  }
 }

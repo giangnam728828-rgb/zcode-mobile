@@ -4,4 +4,7 @@
     <string name="shortcut_new_chat_long">开一个新会话继续干活</string>
     <string name="shortcut_automation">自动化</string>
     <string name="shortcut_automation_long">打开自动化规则</string>
+    <string name="a11y_label">ZCode 屏幕助手</string>
+    <string name="a11y_description">让 ZCode 读屏幕上的文字、按文字点按钮、输入内容和返回桌面，用来跑「打开某应用后自动操作」这类规则。只在本机处理，不上传屏幕内容。</string>
+    <string name="notif_label">ZCode 通知读取</string>
 </resources>

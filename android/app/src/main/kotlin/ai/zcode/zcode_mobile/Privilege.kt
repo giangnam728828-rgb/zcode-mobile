@@ -17,6 +17,7 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -125,6 +126,9 @@ object Privilege {
         }
         map["powerSave"] = (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
             .isPowerSaveMode
+        map["accessibility"] = A11yState.enabled(context)
+        map["a11yConnected"] = A11yState.connected
+        map["notificationListener"] = ZcodeNotificationService.connected
         return map
     }
 
@@ -434,6 +438,43 @@ object Privilege {
         return hashMapOf("stream" to stream, "level" to now, "max" to max)
     }
 
+    // ------------------------------------------------------------------ voice
+
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var pendingSpeech: String? = null
+
+    /** Reads text out loud. The first call may only queue until TTS warms up. */
+    @Synchronized
+    fun speak(context: Context, text: String): Boolean {
+        if (text.isBlank()) return false
+        val engine = tts ?: try {
+            TextToSpeech(context.applicationContext) { status ->
+                ttsReady = status == TextToSpeech.SUCCESS
+                val queued = pendingSpeech
+                pendingSpeech = null
+                if (ttsReady && !queued.isNullOrEmpty()) {
+                    try {
+                        tts?.speak(queued, TextToSpeech.QUEUE_FLUSH, null, "zcode")
+                    } catch (e: Throwable) {
+                    }
+                }
+            }.also { tts = it }
+        } catch (e: Throwable) {
+            return false
+        }
+        if (ttsReady) {
+            return try {
+                engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "zcode") ==
+                    TextToSpeech.SUCCESS
+            } catch (e: Throwable) {
+                false
+            }
+        }
+        pendingSpeech = text
+        return true
+    }
+
     /** Opens the screen that lets the user grant a special app access. */
     fun openSpecial(context: Context, kind: String): Boolean {
         val action = when (kind) {
@@ -442,6 +483,8 @@ object Privilege {
             "notifications" -> Settings.ACTION_APP_NOTIFICATION_SETTINGS
             "battery" -> Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
             "usage" -> Settings.ACTION_USAGE_ACCESS_SETTINGS
+            "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
+            "notification_listener" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
             else -> Settings.ACTION_SETTINGS
         }
         return try {

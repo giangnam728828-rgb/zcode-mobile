@@ -15,6 +15,7 @@ import 'pages/plugins_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/terminal_page.dart';
 import 'pages/workspace_picker_page.dart';
+import 'platform/a11y_bridge.dart';
 import 'platform/privilege_bridge.dart';
 import 'services/automation.dart';
 import 'services/plugins.dart';
@@ -77,6 +78,16 @@ void main() {
     notifications: true,
     writeSettings: true,
     dndAccess: true,
+    accessibility: true,
+    a11yConnected: true,
+    notificationListener: true,
+  ));
+  A11yBridge.debugSetStatus(const A11yStatus(
+    enabled: true,
+    connected: true,
+    notificationListener: true,
+    foreground: 'com.tencent.mm',
+    foregroundLabel: '微信',
   ));
   state.privilege = PrivilegeBridge.status;
   final Conversation c = Conversation(id: 'demo', title: '整理工作区并补文档');

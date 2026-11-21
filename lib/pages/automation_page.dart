@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../platform/a11y_bridge.dart';
 import '../platform/privilege_bridge.dart';
 import '../services/automation.dart';
 import '../state/app_state.dart';
@@ -126,9 +127,28 @@ class _AutomationPageState extends State<AutomationPage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: <Widget>[
               const _SheetHandle(),
-              Text('模板',
-                  style: Theme.of(ctx).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Row(
+                children: <Widget>[
+                  Text('模板',
+                      style: Theme.of(ctx).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      for (final AutomationRule t in list) {
+                        final AutomationRule copy = t.copy()
+                          ..id = 'r${DateTime.now().microsecondsSinceEpoch}'
+                          ..lastRunMs = 0
+                          ..runCount = 0;
+                        engine.add(copy);
+                      }
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('全部添加',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
               const SizedBox(height: 4),
               Text('加进列表后可以再改触发条件和动作。',
                   style: TextStyle(
@@ -158,6 +178,313 @@ class _AutomationPageState extends State<AutomationPage> {
                       ),
                     ),
                   )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Batch enable or disable, for the days when a rule set gets noisy.
+  void _setAll(AutomationEngine engine, bool on) {
+    for (final AutomationRule r in engine.rules) {
+      engine.toggle(r.id, on);
+    }
+    setState(() {});
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(on ? '全部规则已启用' : '全部规则已停用'),
+        duration: const Duration(milliseconds: 1600),
+      ));
+  }
+
+  /// The "less tapping" entrance: type one sentence, get an editable rule.
+  Future<void> _quickRule() async {
+    final TextEditingController controller = TextEditingController();
+    String text = '';
+    final String? sentence = await showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) {
+        final ColorScheme cs = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('一句话建规则', style: TextStyle(fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 3,
+                minLines: 2,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(
+                  hintText: '例如：到家连上 Wi-Fi 就 git pull，然后通知我',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (String v) => text = v,
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: <String>[
+                  '每天 22:30 总结工作',
+                  '电量低于 20% 调暗',
+                  '验证码通知自动复制',
+                  '屏幕出现构建成功就朗读',
+                  '息屏 30 分钟整理笔记',
+                  '打开微信时点「打卡」',
+                ]
+                    .map((String sample) => ActionChip(
+                          label: Text(sample,
+                              style: const TextStyle(fontSize: 10.5)),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            controller.text = sample;
+                            text = sample;
+                          },
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              Text('会先解析成规则，再打开编辑页给你确认。',
+                  style: TextStyle(
+                      fontSize: 10.5, color: cs.onSurface.withOpacity(0.45))),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.pop(ctx, text.trim().isEmpty ? null : text.trim()),
+              child: const Text('解析'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (sentence == null || sentence.isEmpty || !mounted) return;
+    final AutomationRule draft = AutomationDraft.parse(sentence);
+    final AppState app = _app;
+    final AutomationRule? saved =
+        await Navigator.of(context).push<AutomationRule>(
+      MaterialPageRoute<AutomationRule>(
+        builder: (_) => _RuleEditorPage(rule: draft, isNew: true),
+      ),
+    );
+    if (saved == null || !mounted) return;
+    app.automation?.add(saved);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('已加上「${saved.name}」'),
+        duration: const Duration(milliseconds: 1800),
+      ));
+  }
+
+  Widget _a11yCard(AppState app, ColorScheme cs, bool en) {
+    final A11yStatus st = app.a11y;
+    final bool on = st.connected;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: on
+            ? cs.tertiaryContainer.withOpacity(0.25)
+            : cs.surfaceVariant.withOpacity(0.32),
+        border: Border.all(
+          color: on
+              ? cs.tertiary.withOpacity(0.3)
+              : cs.outline.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.visibility_outlined,
+                  size: 17,
+                  color: on ? cs.tertiary : cs.onSurface.withOpacity(0.5)),
+              const SizedBox(width: 7),
+              Text(en ? 'Screen & notifications' : '屏幕与通知',
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: on
+                      ? cs.tertiary.withOpacity(0.16)
+                      : cs.onSurface.withOpacity(0.06),
+                ),
+                child: Text(
+                  on ? (en ? 'connected' : '已连接') : (en ? 'off' : '未开启'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color:
+                        on ? cs.tertiary : cs.onSurface.withOpacity(0.5),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => _openA11y(app),
+                child: Text(on ? (en ? 'Settings' : '管理') : '去开启',
+                    style: const TextStyle(fontSize: 11.5)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            on
+                ? '不用 root 就能读屏、按文字点按钮、输入、返回桌面，也能拿通知当触发条件。'
+                : '开启后，规则可以「打开某应用后自动点一下」「屏幕出现某句话就提醒」，'
+                    '通知也能当触发条件。不需要 root。',
+            style: TextStyle(
+                fontSize: 11.5,
+                height: 1.45,
+                color: cs.onSurface.withOpacity(0.6)),
+          ),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: <Widget>[
+              _capChip(en ? 'Screen' : '无障碍', st.connected, cs),
+              _capChip(en ? 'Notifications' : '通知读取',
+                  st.notificationListener, cs),
+              if (st.foregroundLabel.isNotEmpty)
+                _capChip('前台：${st.foregroundLabel}', true, cs),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(0, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () async {
+                  final bool ok =
+                      await app.openA11ySettings(notifications: true);
+                  if (!ok && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('没打开设置页，手动去 设置 → 通知使用权')));
+                  }
+                },
+                icon: const Icon(Icons.notifications_outlined, size: 14),
+                label: Text(en ? 'Notification access' : '通知使用权',
+                    style: const TextStyle(fontSize: 11)),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(0, 30),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: on ? () => _showScreen(app) : null,
+                icon: const Icon(Icons.text_snippet_outlined, size: 14),
+                label: Text(en ? 'Read screen now' : '读一下当前屏幕',
+                    style: const TextStyle(fontSize: 11)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openA11y(AppState app) async {
+    if (app.a11y.connected) {
+      await app.openA11ySettings();
+      return;
+    }
+    await app.openA11ySettings();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('在「已下载的服务」里找到 ZCode 屏幕助手，打开开关。'),
+      duration: Duration(seconds: 4),
+    ));
+  }
+
+  Future<void> _showScreen(AppState app) async {
+    final A11ySnapshot snap = await app.readScreen(limit: 40);
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext ctx) {
+        final ColorScheme cs = Theme.of(ctx).colorScheme;
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.92,
+          builder: (BuildContext c, ScrollController controller) => ListView(
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+            children: <Widget>[
+              const _SheetHandle(),
+              Text(snap.app.isEmpty ? snap.package : snap.app,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text('${snap.nodes.length} 个可读元素',
+                  style: TextStyle(
+                      fontSize: 11, color: cs.onSurface.withOpacity(0.45))),
+              const SizedBox(height: 10),
+              if (snap.isEmpty)
+                Text('这一屏没有可读文字。有些应用（比如银行、游戏）会主动屏蔽。',
+                    style: TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: cs.onSurface.withOpacity(0.55)))
+              else
+                ...snap.nodes.map((A11yNode n) => Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(9),
+                        color: cs.surfaceVariant.withOpacity(0.3),
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(n.label,
+                                style: const TextStyle(fontSize: 12)),
+                          ),
+                          if (n.clickable)
+                            Text('可点',
+                                style: TextStyle(
+                                    fontSize: 9.5, color: cs.primary)),
+                          if (n.editable)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 5),
+                              child: Text('可输入',
+                                  style: TextStyle(
+                                      fontSize: 9.5, color: cs.tertiary)),
+                            ),
+                        ],
+                      ),
+                    )),
             ],
           ),
         );
@@ -195,6 +522,11 @@ class _AutomationPageState extends State<AutomationPage> {
         ),
         actions: <Widget>[
           IconButton(
+            tooltip: en ? 'One sentence → rule' : '一句话建规则',
+            icon: const Icon(Icons.auto_awesome_rounded, size: 19),
+            onPressed: engine == null ? null : _quickRule,
+          ),
+          IconButton(
             tooltip: en ? 'History' : '运行记录',
             icon: const Icon(Icons.history_rounded, size: 20),
             onPressed: engine == null ? null : _showLogs,
@@ -223,6 +555,8 @@ class _AutomationPageState extends State<AutomationPage> {
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 122),
               children: <Widget>[
                 _privCard(app, cs, en),
+                const SizedBox(height: 10),
+                _a11yCard(app, cs, en),
                 const SizedBox(height: 14),
                 Row(
                   children: <Widget>[
@@ -230,6 +564,18 @@ class _AutomationPageState extends State<AutomationPage> {
                         style: const TextStyle(
                             fontSize: 13, fontWeight: FontWeight.w600)),
                     const Spacer(),
+                    PopupMenuButton<bool>(
+                      tooltip: en ? 'Enable / disable all' : '批量启停',
+                      splashRadius: 18,
+                      icon: const Icon(Icons.tune_rounded, size: 17),
+                      onSelected: (bool on) => _setAll(engine, on),
+                      itemBuilder: (_) => <PopupMenuEntry<bool>>[
+                        const PopupMenuItem<bool>(
+                            value: true, child: Text('全部启用', style: TextStyle(fontSize: 13))),
+                        const PopupMenuItem<bool>(
+                            value: false, child: Text('全部停用', style: TextStyle(fontSize: 13))),
+                      ],
+                    ),
                     TextButton.icon(
                       onPressed: _showTemplates,
                       icon: const Icon(Icons.grid_view_rounded, size: 15),
@@ -524,6 +870,10 @@ class _AutomationPageState extends State<AutomationPage> {
       <String>['连上家里 Wi-Fi', '自动 git pull，回来就是最新代码'],
       <String>['电量低于 20%', '调暗屏幕，提醒你收工'],
       <String>['解锁手机', '把今天的待办推到通知栏'],
+      <String>['收到验证码通知', '自动复制，切过去就能粘贴'],
+      <String>['打开微信', '按文字点「打卡」，不用自己找按钮'],
+      <String>['屏幕出现「构建成功」', '朗读一句，然后震一下'],
+      <String>['息屏半小时', '智能体把今天的改动整理成笔记'],
       <String>['每天 22:30', '让智能体总结今天改了什么'],
       <String>['长按图标', '「自动化」快捷方式直达规则页'],
     ];
@@ -586,6 +936,8 @@ IconData _triggerIcon(String kind) {
     case 'battery_below':
     case 'battery_above':
       return Icons.battery_alert_rounded;
+    case 'battery_full':
+      return Icons.battery_charging_full_rounded;
     case 'charging':
     case 'unplugged':
       return Icons.power_rounded;
@@ -597,6 +949,14 @@ IconData _triggerIcon(String kind) {
       return Icons.phonelink_lock_rounded;
     case 'boot':
       return Icons.restart_alt_rounded;
+    case 'notification':
+      return Icons.notifications_active_rounded;
+    case 'app_foreground':
+      return Icons.apps_rounded;
+    case 'screen_text':
+      return Icons.text_fields_rounded;
+    case 'idle':
+      return Icons.bedtime_outlined;
     default:
       return Icons.touch_app_rounded;
   }
@@ -696,6 +1056,10 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               _trigger.kind == 'battery_above')
             _batteryArgs(cs),
           if (_trigger.kind == 'wifi_on') _wifiArgs(cs),
+          if (_trigger.kind == 'notification') _notifArgs(cs),
+          if (_trigger.kind == 'app_foreground') _appArgs(cs),
+          if (_trigger.kind == 'screen_text') _screenTextArgs(cs),
+          if (_trigger.kind == 'idle') _idleArgs(cs),
           const SizedBox(height: 18),
           Row(
             children: <Widget>[
@@ -928,6 +1292,217 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
     );
   }
 
+  Widget _notifArgs(ColorScheme cs) {
+    final String app = '${_trigger.args['app'] ?? ''}';
+    final String keyword = '${_trigger.args['keyword'] ?? ''}';
+    void put(String key, String value) {
+      final Map<String, dynamic> next =
+          Map<String, dynamic>.from(_trigger.args)..[key] = value.trim();
+      _trigger = AutomationTrigger('notification', next);
+      setState(() {});
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: <Widget>[
+          TextFormField(
+            initialValue: app,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: '来自哪个应用（留空＝任何应用）',
+              hintText: '微信 / com.tencent.mm',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (String v) => put('app', v),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: keyword,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: '标题或正文包含（留空＝全部）',
+              hintText: '验证码 / 老板 / 构建失败',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (String v) => put('keyword', v),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '需要「通知使用权」，自动化页顶部可以一键去开。动作里可以用 {app}、{title}、{text}。',
+              style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.4,
+                  color: cs.onSurface.withOpacity(0.45)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _appArgs(ColorScheme cs) {
+    final String label = '${_trigger.args['label'] ?? ''}';
+    final String pkg = '${_trigger.args['package'] ?? ''}';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: <Widget>[
+          TextFormField(
+            initialValue: label,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: '应用名称',
+              hintText: '微信',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (String v) {
+              _trigger = AutomationTrigger('app_foreground',
+                  <String, dynamic>{'label': v.trim(), 'package': pkg});
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextFormField(
+                  initialValue: pkg,
+                  style: const TextStyle(fontSize: 12.5),
+                  decoration: const InputDecoration(
+                    labelText: '包名（更准，可留空）',
+                    hintText: 'com.tencent.mm',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (String v) {
+                    _trigger = AutomationTrigger('app_foreground',
+                        <String, dynamic>{'label': label, 'package': v.trim()});
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _pickApp,
+                child: const Text('选应用', style: TextStyle(fontSize: 11.5)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('需要无障碍服务（不用 root）。',
+                style: TextStyle(
+                    fontSize: 10.5, color: cs.onSurface.withOpacity(0.45))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _screenTextArgs(ColorScheme cs) {
+    final String text = '${_trigger.args['text'] ?? ''}';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: TextFormField(
+        initialValue: text,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          labelText: '屏幕上出现的文字',
+          hintText: '构建成功 / 支付成功',
+          isDense: true,
+          border: const OutlineInputBorder(),
+          helperText: '每次切到新界面时会读一次，30 秒内不会重复触发。',
+          helperStyle:
+              TextStyle(fontSize: 10, color: cs.onSurface.withOpacity(0.4)),
+        ),
+        onChanged: (String v) {
+          _trigger = AutomationTrigger(
+              'screen_text', <String, dynamic>{'text': v.trim()});
+        },
+      ),
+    );
+  }
+
+  Widget _idleArgs(ColorScheme cs) {
+    final int minutes = (_trigger.args['minutes'] as num?)?.toInt() ?? 30;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Slider(
+              value: minutes.toDouble(),
+              min: 5,
+              max: 180,
+              divisions: 35,
+              label: '$minutes 分钟',
+              onChanged: (double v) {
+                setState(() {
+                  _trigger = AutomationTrigger(
+                      'idle', <String, dynamic>{'minutes': v.round()});
+                });
+              },
+            ),
+          ),
+          SizedBox(
+            width: 64,
+            child: Text('$minutes 分钟',
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickApp() async {
+    final List<Map<String, String>> apps = await PrivilegeBridge.apps();
+    if (!mounted) return;
+    if (apps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('读不到应用列表')),
+      );
+      return;
+    }
+    final String? picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.92,
+        builder: (BuildContext c, ScrollController controller) => ListView.builder(
+          controller: controller,
+          itemCount: apps.length,
+          itemBuilder: (BuildContext c, int i) {
+            final Map<String, String> a = apps[i];
+            return ListTile(
+              dense: true,
+              title: Text(a['label'] ?? '', style: const TextStyle(fontSize: 13)),
+              subtitle: Text(a['package'] ?? '',
+                  style: const TextStyle(fontSize: 10.5)),
+              onTap: () => Navigator.pop(
+                  ctx, '${a['label'] ?? ''}\u0001${a['package'] ?? ''}'),
+            );
+          },
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final int cut = picked.indexOf('\u0001');
+    final String label = cut < 0 ? picked : picked.substring(0, cut);
+    final String pkg = cut < 0 ? '' : picked.substring(cut + 1);
+    setState(() {
+      _trigger = AutomationTrigger('app_foreground',
+          <String, dynamic>{'label': label, 'package': pkg});
+    });
+  }
+
   void _save() {
     final String name = _name.trim().isEmpty ? '未命名规则' : _name.trim();
     if (_actions.isEmpty) {
@@ -955,8 +1530,13 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
             for (final List<String> item in <List<String>>[
               <String>['agent', '叫智能体干活', '跑一轮对话，结果写进记录'],
               <String>['shell', '执行命令', '内置 sh / Termux / root / Shizuku'],
-              <String>['notify', '发通知', '标题和正文，支持变量'],
-              <String>['device', '操作手机', 'Wi-Fi、截屏、点击、锁屏…'],
+              <String>['notify', '发通知', '标题和正文，支持 {app} {text}'],
+              <String>['a11y', '屏幕操作', '按文字点按钮、输入、返回，不用 root'],
+              <String>['device', '操作手机', 'Wi-Fi、截屏、音量、深色模式…'],
+              <String>['speak', '朗读一段话', '系统 TTS，不用 root'],
+              <String>['clipboard', '复制到剪贴板', '常和通知触发搭配，如 {text}'],
+              <String>['open_app', '打开应用', '包名或应用名'],
+              <String>['delay', '等一会儿', '给上一步留时间'],
               <String>['webhook', '发 HTTP 请求', '把结果推到自己的服务'],
             ])
               ListTile(
@@ -1007,6 +1587,16 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
         return Icons.notifications_active_outlined;
       case 'device':
         return Icons.phone_android_rounded;
+      case 'a11y':
+        return Icons.touch_app_rounded;
+      case 'speak':
+        return Icons.record_voice_over_rounded;
+      case 'clipboard':
+        return Icons.copy_all_rounded;
+      case 'open_app':
+        return Icons.open_in_new_rounded;
+      case 'delay':
+        return Icons.hourglass_bottom_rounded;
       case 'webhook':
         return Icons.cloud_upload_outlined;
       default:
@@ -1031,6 +1621,11 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
           <String>['wifi_off', '断开 Wi-Fi'],
           <String>['screen_on', '点亮屏幕'],
           <String>['unlock', '解锁手机'],
+          <String>['notification', '收到通知'],
+          <String>['app_foreground', '打开某个应用'],
+          <String>['screen_text', '屏幕出现文字'],
+          <String>['battery_full', '电量充满'],
+          <String>['idle', '息屏一段时间'],
           <String>['boot', '开机后首次打开'],
         ];
         return SafeArea(
@@ -1075,6 +1670,14 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
         return <String, dynamic>{'level': 80};
       case 'wifi_on':
         return <String, dynamic>{'ssid': ''};
+      case 'notification':
+        return <String, dynamic>{'app': '', 'keyword': ''};
+      case 'app_foreground':
+        return <String, dynamic>{'package': '', 'label': ''};
+      case 'screen_text':
+        return <String, dynamic>{'text': ''};
+      case 'idle':
+        return <String, dynamic>{'minutes': 30};
       default:
         return <String, dynamic>{};
     }
@@ -1115,6 +1718,21 @@ class _ActionSheetState extends State<_ActionSheet> {
         return <String, dynamic>{'title': 'ZCode', 'body': ''};
       case 'device':
         return <String, dynamic>{'action': 'wifi_on', 'package': ''};
+      case 'a11y':
+        return <String, dynamic>{
+          'op': 'click',
+          'text': '',
+          'value': '',
+          'index': 0,
+        };
+      case 'speak':
+        return <String, dynamic>{'text': ''};
+      case 'clipboard':
+        return <String, dynamic>{'text': '{text}'};
+      case 'open_app':
+        return <String, dynamic>{'package': '', 'label': ''};
+      case 'delay':
+        return <String, dynamic>{'seconds': 5};
       case 'webhook':
         return <String, dynamic>{'url': '', 'body': '{}'};
       default:
@@ -1180,6 +1798,16 @@ class _ActionSheetState extends State<_ActionSheet> {
         return '发通知';
       case 'device':
         return '操作手机';
+      case 'a11y':
+        return '屏幕操作';
+      case 'speak':
+        return '朗读';
+      case 'clipboard':
+        return '复制到剪贴板';
+      case 'open_app':
+        return '打开应用';
+      case 'delay':
+        return '等待';
       case 'webhook':
         return 'HTTP 请求';
       default:
@@ -1322,6 +1950,148 @@ class _ActionSheetState extends State<_ActionSheet> {
               child: Text('这个动作需要 root 或 Shizuku，当前会失败。',
                   style: TextStyle(fontSize: 10.5, color: cs.error)),
             ),
+        ];
+      case 'a11y':
+        final String rawOp = '${_args['op'] ?? 'click'}';
+        final String op = A11yAction.all
+                .any((A11yAction a) => a.id == rawOp)
+            ? rawOp
+            : 'click';
+        final bool connected = app.a11y.connected;
+        return <Widget>[
+          DropdownButtonFormField<String>(
+            value: op,
+            isDense: true,
+            style: TextStyle(fontSize: 13, color: cs.onSurface),
+            decoration: const InputDecoration(
+                labelText: '动作', isDense: true, border: OutlineInputBorder()),
+            items: A11yAction.all
+                .map((A11yAction a) => DropdownMenuItem<String>(
+                      value: a.id,
+                      child: Text(a.zh, style: const TextStyle(fontSize: 12.5)),
+                    ))
+                .toList(),
+            onChanged: (String? v) {
+              if (v != null) setState(() => _args['op'] = v);
+            },
+          ),
+          if (A11yAction.needsText(op)) ...<Widget>[
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: '${_args['text'] ?? ''}',
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                labelText:
+                    op == 'input' ? '输入框的提示文字（可留空）' : '要操作的文字',
+                hintText: op == 'input' ? '搜索' : '打卡',
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (String v) => _args['text'] = v,
+            ),
+          ],
+          if (A11yAction.needsValue(op)) ...<Widget>[
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: '${_args['value'] ?? ''}',
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(
+                labelText: '要输入的内容',
+                hintText: '可以用 {text} 取通知正文',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (String v) => _args['value'] = v,
+            ),
+          ],
+          if (op == 'click' || op == 'long_click') ...<Widget>[
+            const SizedBox(height: 10),
+            TextFormField(
+              initialValue: '${_args['index'] ?? 0}',
+              keyboardType: TextInputType.number,
+              style: const TextStyle(fontSize: 13),
+              decoration: const InputDecoration(
+                labelText: '第几个匹配（从 0 数，默认 0）',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (String v) =>
+                  _args['index'] = int.tryParse(v.trim()) ?? 0,
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            connected
+                ? '按屏幕上的文字找元素，不看坐标，换机型也能用。'
+                : '无障碍服务没开，这个动作会报错。先到自动化页顶部开启。',
+            style: TextStyle(
+                fontSize: 10.5,
+                height: 1.4,
+                color:
+                    connected ? cs.onSurface.withOpacity(0.45) : cs.error),
+          ),
+        ];
+      case 'speak':
+        return <Widget>[
+          TextFormField(
+            initialValue: '${_args['text'] ?? ''}',
+            maxLines: 3,
+            minLines: 2,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: '读什么',
+              hintText: '构建完成了，可以收工',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+            onChanged: (String v) => _args['text'] = v,
+          ),
+        ];
+      case 'clipboard':
+        return <Widget>[
+          TextFormField(
+            initialValue: '${_args['text'] ?? ''}',
+            maxLines: 4,
+            minLines: 2,
+            style: const TextStyle(fontSize: 12.5),
+            decoration: const InputDecoration(
+              labelText: '复制什么',
+              hintText: '{text}',
+              helperText: '支持 {app} {title} {text} {time} {battery} {ssid}',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+            onChanged: (String v) => _args['text'] = v,
+          ),
+        ];
+      case 'open_app':
+        return <Widget>[
+          TextFormField(
+            initialValue: '${_args['package'] ?? ''}',
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: '包名或应用名',
+              hintText: 'com.tencent.mm / 微信',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (String v) => _args['package'] = v,
+          ),
+        ];
+      case 'delay':
+        return <Widget>[
+          TextFormField(
+            initialValue: '${_args['seconds'] ?? 5}',
+            keyboardType: TextInputType.number,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: '等多少秒（1–300）',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (String v) =>
+                _args['seconds'] = int.tryParse(v.trim()) ?? 5,
+          ),
         ];
       case 'webhook':
         return <Widget>[

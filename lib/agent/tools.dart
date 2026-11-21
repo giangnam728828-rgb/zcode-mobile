@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../platform/a11y_bridge.dart';
 import '../platform/privilege_bridge.dart';
 
 enum ToolStatus { pending, running, done, failed, denied }
@@ -430,9 +431,12 @@ class ToolBox {
         ToolSpec(
           'device',
           'Use the phone as a phone. Without privileges: notify, clipboard, '
-              'vibrate, open_app, apps, battery, volume. With root or Shizuku '
-              'it also drives system switches (wifi/data/airplane/dnd/'
-              'brightness), screenshots, input tap/swipe/text, force-stop, '
+              'vibrate, open_app, apps, battery, volume, speak. With the '
+              'accessibility service it can also read the screen (screen), tap '
+              'a button by its label (click), type into a field (type_text) '
+              'and press back/home/recents (global) — no root needed. With root '
+              'or Shizuku it drives system switches (wifi/data/airplane/dnd/'
+              'brightness), screenshots, coordinate input, force-stop, '
               'package install/grant and raw privileged shell. Call '
               'action="help" first to see what the current device allows.',
           <String, dynamic>{
@@ -441,7 +445,8 @@ class ToolBox {
               'action': <String, dynamic>{
                 'type': 'string',
                 'description': 'help | notify | clipboard_get | clipboard_set | '
-                    'vibrate | open_app | apps | battery | volume | key | tap | '
+                    'vibrate | open_app | apps | battery | volume | speak | '
+                    'screen | click | type_text | global | key | tap | '
                     'swipe | text | screenshot | wifi | data | airplane | dnd | '
                     'brightness | lock | panel | force_stop | current_app | '
                     'install | grant | shell'
@@ -655,6 +660,8 @@ class ToolBox {
         'force_stop',
         'airplane',
         'data',
+        'click',
+        'type_text',
       };
       return risky.contains('${call.input['action'] ?? ''}');
     }
@@ -721,6 +728,35 @@ class ToolBox {
         final Map<String, dynamic> v =
             await PrivilegeBridge.volume('music', delta: delta);
         return 'volume: ${v['level']}/${v['max']}';
+      case 'speak':
+        final String said = '${call.input['text'] ?? ''}'.trim();
+        if (said.isEmpty) return 'Nothing to say.';
+        return await A11yBridge.speak(said)
+            ? 'Spoken.'
+            : 'No text-to-speech engine available.';
+      case 'screen':
+        return _clip(await A11yBridge.describe(limit: 40));
+      case 'click':
+        final String label = '${call.input['text'] ?? ''}'.trim();
+        if (label.isEmpty) return 'Missing text to click.';
+        final bool clicked = await A11yBridge.click(label);
+        return clicked
+            ? 'Tapped "$label".'
+            : 'Not found on screen: "$label" (or accessibility is off).';
+      case 'type_text':
+        final String typed = '${call.input['text'] ?? ''}';
+        final bool typedOk = await A11yBridge.setText(
+          typed,
+          target: '${call.input['value'] ?? ''}',
+        );
+        return typedOk
+            ? 'Typed ${typed.length} characters.'
+            : 'No editable field found (or accessibility is off).';
+      case 'global':
+        final String gesture = '${call.input['value'] ?? 'back'}';
+        return await A11yBridge.global(gesture)
+            ? 'Done.'
+            : 'Failed — needs the accessibility service.';
     }
 
     if (!st.privileged) {
@@ -818,9 +854,17 @@ class ToolBox {
         '· granted: ${st.shizukuGranted}');
     b.writeln('notifications: ${st.notifications} · '
         'write settings: ${st.writeSettings} · dnd: ${st.dndAccess}');
+    b.writeln('accessibility: ${st.a11yConnected} (screen, click, type_text, '
+        'global) · notification listener: ${st.notificationListener}');
     b.writeln('');
     b.writeln('always available: notify, clipboard_get, clipboard_set,');
-    b.writeln('  vibrate, open_app, apps, battery, volume');
+    b.writeln('  vibrate, open_app, apps, battery, volume, speak');
+    if (st.a11yConnected) {
+      b.writeln('screen access: screen, click, type_text,');
+      b.writeln('  global (back/home/recents/notifications/lock)');
+    } else {
+      b.writeln('screen access needs 设置 → 无障碍 → ZCode 屏幕助手');
+    }
     if (st.privileged) {
       b.writeln('unlocked: wifi, data, airplane, dnd, brightness, lock, panel,');
       b.writeln('  key, tap, swipe, text, screenshot, current_app, force_stop,');

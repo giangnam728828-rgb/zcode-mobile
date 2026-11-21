@@ -13,6 +13,7 @@ import '../models/app_config.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+import '../platform/a11y_bridge.dart';
 import '../platform/device_bridge.dart';
 import '../platform/privilege_bridge.dart';
 import '../services/account.dart';
@@ -74,6 +75,9 @@ class AppState extends ChangeNotifier {
   /// Root / Shizuku availability, refreshed whenever the app comes back.
   PrivStatus privilege = const PrivStatus();
 
+  /// Accessibility service and notification listener state.
+  A11yStatus a11y = const A11yStatus();
+
   /// Automation rules and their history. Created in [init].
   AutomationEngine? automation;
 
@@ -113,6 +117,7 @@ class AppState extends ChangeNotifier {
     _workspacePath = wsPath;
     await _bindExtensions();
     privilege = await PrivilegeBridge.refresh();
+    a11y = await A11yBridge.refresh();
     automation = AutomationEngine(runner: _runAutomationAction);
     automation!.onFinished = _notifyRuleResult;
     await automation!.load();
@@ -215,10 +220,12 @@ class AppState extends ChangeNotifier {
     storageAccess = DeviceBridge.info.storageAccess;
     termuxAvailable = DeviceBridge.info.termux;
     privilege = await PrivilegeBridge.refresh();
+    a11y = await A11yBridge.refresh();
     notifyListeners();
   }
 
-  /// Points the agent at another folder. Returns an empty string on success,
+  /// Points the agent at another folder.
+  /// Returns an empty string on success,
   /// otherwise the reason the folder cannot be used.
   Future<String> switchWorkspace(String path) async {
     final String problem = await WorkspaceResolver.validate(path);
@@ -1447,6 +1454,7 @@ class AppState extends ChangeNotifier {
   /// Re-reads root / Shizuku state. Cheap enough to call on every resume.
   Future<void> refreshPrivilege() async {
     privilege = await PrivilegeBridge.refresh();
+    a11y = await A11yBridge.refresh();
     notifyListeners();
   }
 
@@ -1474,8 +1482,37 @@ class AppState extends ChangeNotifier {
 
   void _listenDeviceEvents() {
     PrivilegeBridge.listen((Map<String, dynamic> event) {
+      final String type = '${event['type'] ?? ''}';
+      if (type == 'a11y_connected' ||
+          type == 'a11y_disconnected' ||
+          type == 'notification_listener') {
+        unawaited(_refreshA11ySilently());
+      }
       automation?.onEvent(event);
     });
+  }
+
+  Future<void> _refreshA11ySilently() async {
+    a11y = await A11yBridge.refresh();
+    notifyListeners();
+  }
+
+  /// Opens the accessibility settings screen, then re-reads the status when the
+  /// user comes back.
+  Future<bool> openA11ySettings({bool notifications = false}) async {
+    final bool ok = await A11yBridge.openSettings(notifications: notifications);
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    await refreshPrivilege();
+    return ok;
+  }
+
+  /// Reads the current screen for the "试一试" button and for the agent.
+  Future<A11ySnapshot> readScreen({int limit = 40}) async {
+    final A11ySnapshot snap = await A11yBridge.snapshot(limit: limit);
+    if (snap.connected != a11y.connected) {
+      unawaited(_refreshA11ySilently());
+    }
+    return snap;
   }
 
   Future<void> _seedSignal() async {
@@ -1520,6 +1557,32 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  /// Replaces `{app}`, `{text}`, `{time}` … in any action argument. This is what
+  /// makes "把验证码复制到剪贴板" work without writing code.
+  String _fill(String raw, AutomationRule rule) {
+    if (raw.isEmpty) return raw;
+    final AutomationSignal sig =
+        automation?.signal ?? const AutomationSignal();
+    final DateTime now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final String app =
+        sig.notifApp.isNotEmpty ? sig.notifApp : sig.foregroundLabel;
+    final String pkg =
+        sig.notifPackage.isNotEmpty ? sig.notifPackage : sig.foreground;
+    return raw
+        .replaceAll('{app}', app)
+        .replaceAll('{package}', pkg)
+        .replaceAll('{title}', sig.notifTitle)
+        .replaceAll('{text}', sig.notifText)
+        .replaceAll('{screen}', sig.screenText)
+        .replaceAll('{battery}', sig.batteryLevel >= 0 ? '${sig.batteryLevel}' : '')
+        .replaceAll('{ssid}', sig.ssid)
+        .replaceAll('{time}', '${two(now.hour)}:${two(now.minute)}')
+        .replaceAll('{date}',
+            '${now.year}-${two(now.month)}-${two(now.day)}')
+        .replaceAll('{rule}', rule.name);
+  }
+
   Future<String> _runAutomationAction(
     AutomationRule rule,
     AutomationAction action,
@@ -1528,13 +1591,13 @@ class AppState extends ChangeNotifier {
     switch (action.kind) {
       case 'notify':
         final bool ok = await PrivilegeBridge.notify(
-          '${a['title'] ?? rule.name}',
-          '${a['body'] ?? ''}',
+          _fill('${a['title'] ?? rule.name}', rule),
+          _fill('${a['body'] ?? ''}', rule),
           id: rule.id.hashCode & 0x7fff,
         );
         return ok ? '已发出通知' : '通知没发出去（可能缺少通知权限）';
       case 'shell':
-        final String cmd = '${a['command'] ?? ''}'.trim();
+        final String cmd = _fill('${a['command'] ?? ''}', rule).trim();
         if (cmd.isEmpty) return 'ERROR 命令为空';
         final String mode = '${a['mode'] ?? 'builtin'}';
         if (mode == 'builtin') return runShell(cmd);
@@ -1550,11 +1613,101 @@ class AppState extends ChangeNotifier {
           '${a['package'] ?? ''}',
         );
       case 'agent':
-        return _runAutomationAgent('${a['prompt'] ?? ''}'.trim());
+        return _runAutomationAgent(_fill('${a['prompt'] ?? ''}', rule).trim());
       case 'webhook':
-        return _postWebhook('${a['url'] ?? ''}', '${a['body'] ?? ''}');
+        return _postWebhook(
+          _fill('${a['url'] ?? ''}', rule),
+          _fill('${a['body'] ?? ''}', rule),
+        );
+      case 'a11y':
+        return _runA11yAction(a, rule);
+      case 'speak':
+        final String spoken = _fill('${a['text'] ?? ''}', rule).trim();
+        if (spoken.isEmpty) return 'ERROR 没有要朗读的文字';
+        final bool ok = await A11yBridge.speak(spoken);
+        return ok ? '已朗读' : 'ERROR 系统没有可用的语音引擎';
+      case 'clipboard':
+        final String copied = _fill('${a['text'] ?? ''}', rule);
+        final bool ok = await PrivilegeBridge.clipboardSet(copied);
+        return ok ? '已复制 ${copied.length} 个字' : 'ERROR 剪贴板写入失败';
+      case 'open_app':
+        final String target =
+            _fill('${a['package'] ?? a['label'] ?? ''}', rule).trim();
+        if (target.isEmpty) return 'ERROR 没有指定应用';
+        final bool ok = await PrivilegeBridge.openApp(target);
+        return ok ? '已打开 $target' : 'ERROR 找不到应用 $target';
+      case 'delay':
+        final int seconds =
+            ((a['seconds'] as num?)?.toInt() ?? 5).clamp(1, 300).toInt();
+        await Future<void>.delayed(Duration(seconds: seconds));
+        return '等待了 $seconds 秒';
       default:
         return 'ERROR 未知动作 ${action.kind}';
+    }
+  }
+
+  Future<String> _runA11yAction(
+    Map<String, dynamic> a,
+    AutomationRule rule,
+  ) async {
+    final String op = '${a['op'] ?? ''}';
+    if (op.isEmpty) return 'ERROR 没有选择屏幕动作';
+    A11yStatus st = a11y;
+    if (!st.connected) {
+      st = await A11yBridge.refresh();
+      a11y = st;
+    }
+    if (!st.connected) {
+      return 'ERROR 无障碍服务未连接（设置 → 无障碍 → ZCode 屏幕助手）';
+    }
+    final String text = _fill('${a['text'] ?? ''}', rule).trim();
+    final int index = ((a['index'] as num?)?.toInt() ?? 0).clamp(0, 20).toInt();
+    switch (op) {
+      case 'read':
+        final A11ySnapshot snap = await A11yBridge.snapshot(limit: 40);
+        if (!snap.connected) return 'ERROR 无障碍服务断开';
+        if (snap.isEmpty) return '屏幕没有可读文字（${snap.package}）';
+        final List<String> lines = snap.text
+            .split('\n')
+            .where((String l) => l.trim().isNotEmpty)
+            .take(14)
+            .toList();
+        return '${snap.app.isEmpty ? snap.package : snap.app}：${lines.join(' / ')}';
+      case 'click':
+      case 'long_click':
+        if (text.isEmpty) return 'ERROR 要点击的文字为空';
+        final bool ok = await A11yBridge.click(
+          text,
+          index: index,
+          longPress: op == 'long_click',
+        );
+        return ok ? '已点击「$text」' : 'ERROR 屏幕上没找到「$text」';
+      case 'input':
+        final String value =
+            _fill('${a['value'] ?? a['text'] ?? ''}', rule);
+        if (value.isEmpty) return 'ERROR 没有要输入的内容';
+        final bool ok =
+            await A11yBridge.setText(value, target: '${a['text'] ?? ''}');
+        return ok ? '已输入 ${value.length} 个字' : 'ERROR 没找到可输入的框';
+      case 'scroll_down':
+      case 'scroll_up':
+        final int times =
+            ((a['times'] as num?)?.toInt() ?? 1).clamp(1, 6).toInt();
+        final bool ok = await A11yBridge.scroll(
+          forward: op == 'scroll_down',
+          times: times,
+        );
+        return ok ? '已滚动 $times 次' : 'ERROR 没有可滚动的区域';
+      case 'back':
+      case 'home':
+      case 'recents':
+      case 'notifications':
+      case 'screenshot':
+      case 'lock':
+        final bool ok = await A11yBridge.global(op);
+        return ok ? '已执行 $op' : 'ERROR 系统拒绝了 $op';
+      default:
+        return 'ERROR 未知屏幕动作 $op';
     }
   }
 
@@ -1567,6 +1720,13 @@ class AppState extends ChangeNotifier {
       final PrivResult r =
           await PrivilegeBridge.run('screencap -p "$path"', timeout: 30);
       return r.ok ? '已保存 $path' : 'ERROR ${r.text}';
+    }
+    if (id == 'volume_up' || id == 'volume_down' || id == 'mute') {
+      final int delta = id == 'volume_up' ? 2 : (id == 'volume_down' ? -2 : -20);
+      final Map<String, dynamic> v =
+          await PrivilegeBridge.volume('music', delta: delta);
+      if (v.isEmpty) return 'ERROR 读不到音量';
+      return '音量 ${v['level']}/${v['max']}';
     }
     if (!privilege.privileged) {
       return 'ERROR 这个动作需要 root 或 Shizuku（当前：${privilege.label}）';

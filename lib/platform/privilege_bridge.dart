@@ -15,6 +15,9 @@ class PrivStatus {
     this.writeSettings = false,
     this.dndAccess = false,
     this.powerSave = false,
+    this.accessibility = false,
+    this.a11yConnected = false,
+    this.notificationListener = false,
   });
 
   final bool root;
@@ -30,7 +33,18 @@ class PrivStatus {
   final bool dndAccess;
   final bool powerSave;
 
+  /// Accessibility service switched on / actually running, and whether the
+  /// notification listener is connected. These are the root-free superpowers.
+  final bool accessibility;
+  final bool a11yConnected;
+  final bool notificationListener;
+
   bool get privileged => channel == 'root' || channel == 'shizuku';
+
+  /// Anything that lets a rule see or touch other apps.
+  bool get canSeeScreen => a11yConnected;
+
+  bool get rich => privileged || a11yConnected || notificationListener;
 
   String get label {
     switch (channel) {
@@ -44,9 +58,15 @@ class PrivStatus {
   }
 
   /// What automatically becomes possible once a channel is open.
-  String get unlocked => channel == 'root' || channel == 'shizuku'
-      ? '系统开关、截屏、模拟点击、强制停止、改系统设置'
-      : '通知、剪贴板、震动、打开应用、音量、电池';
+  String get unlocked {
+    if (channel == 'root' || channel == 'shizuku') {
+      return a11yConnected
+          ? '系统开关、截屏、模拟点击，加上读屏与按文字点按'
+          : '系统开关、截屏、模拟点击、强制停止、改系统设置';
+    }
+    if (a11yConnected) return '读屏、按文字点按、输入、返回桌面、通知触发';
+    return '通知、剪贴板、震动、打开应用、音量、电池';
+  }
 }
 
 class PrivResult {
@@ -127,6 +147,9 @@ class PrivilegeBridge {
           writeSettings: raw['writeSettings'] == true,
           dndAccess: raw['dndAccess'] == true,
           powerSave: raw['powerSave'] == true,
+          accessibility: raw['accessibility'] == true,
+          a11yConnected: raw['a11yConnected'] == true,
+          notificationListener: raw['notificationListener'] == true,
         );
       }
     } catch (_) {}

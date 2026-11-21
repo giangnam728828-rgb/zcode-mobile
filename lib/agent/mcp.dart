@@ -93,7 +93,7 @@ class HttpMcpClient implements McpClient {
       'capabilities': <String, dynamic>{},
       'clientInfo': <String, dynamic>{
         'name': 'zcode-mobile',
-        'version': '3.3.0',
+        'version': '3.4.0',
       },
     });
     // Notification: no id, fire and forget.
@@ -269,7 +269,7 @@ class StdioMcpClient implements McpClient {
     await _request('initialize', <String, dynamic>{
       'protocolVersion': '2025-06-18',
       'capabilities': <String, dynamic>{},
-      'clientInfo': <String, dynamic>{'name': 'zcode-mobile', 'version': '3.3.0'},
+      'clientInfo': <String, dynamic>{'name': 'zcode-mobile', 'version': '3.4.0'},
     });
     _write(<String, dynamic>{
       'jsonrpc': '2.0',

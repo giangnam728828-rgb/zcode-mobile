@@ -146,6 +146,61 @@ class MainActivity : FlutterActivity() {
                         "openSpecial" -> result.success(
                             Privilege.openSpecial(this, call.argument<String>("kind") ?: "")
                         )
+                        "speak" -> result.success(
+                            Privilege.speak(this, call.argument<String>("text") ?: "")
+                        )
+                        "a11yStatus" -> result.success(A11yOps.status(this))
+                        "a11yEnable" -> result.success(
+                            A11yOps.openSettings(
+                                this,
+                                call.argument<Boolean>("notifications") ?: false
+                            )
+                        )
+                        "a11ySnapshot" -> {
+                            val limit = call.argument<Int>("limit") ?: 60
+                            worker.execute {
+                                val snap = A11yOps.snapshot(limit)
+                                main.post { result.success(snap) }
+                            }
+                        }
+                        "a11yClick" -> result.success(
+                            A11yOps.click(
+                                call.argument<String>("text") ?: "",
+                                call.argument<Int>("index") ?: 0,
+                                call.argument<Boolean>("desc") ?: false,
+                                call.argument<Boolean>("long") ?: false
+                            )
+                        )
+                        "a11ySetText" -> result.success(
+                            A11yOps.setText(
+                                call.argument<String>("text") ?: "",
+                                call.argument<String>("target") ?: ""
+                            )
+                        )
+                        "a11yScroll" -> result.success(
+                            A11yOps.scroll(
+                                call.argument<Boolean>("forward") ?: true,
+                                call.argument<Int>("times") ?: 1
+                            )
+                        )
+                        "a11yGlobal" -> result.success(
+                            A11yOps.global(call.argument<String>("action") ?: "")
+                        )
+                        "a11yTap" -> result.success(
+                            A11yOps.tap(
+                                call.argument<Int>("x") ?: 0,
+                                call.argument<Int>("y") ?: 0
+                            )
+                        )
+                        "a11ySwipe" -> result.success(
+                            A11yOps.swipe(
+                                call.argument<Int>("x") ?: 0,
+                                call.argument<Int>("y") ?: 0,
+                                call.argument<Int>("x2") ?: 0,
+                                call.argument<Int>("y2") ?: 0,
+                                call.argument<Int>("ms") ?: 300
+                            )
+                        )
                         else -> result.notImplemented()
                     }
                 } catch (e: Throwable) {
@@ -156,8 +211,13 @@ class MainActivity : FlutterActivity() {
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, eventChannel)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                    if (sink == null) return
+                    // Everything native funnels through EventHub: screen and
+                    // power events, the accessibility service's foreground app
+                    // and screen text, and incoming notifications.
+                    EventHub.attach { event -> sink.success(event) }
                     val bridge = DeviceEvents(applicationContext) { event ->
-                        main.post { sink?.success(event) }
+                        EventHub.emit(event)
                     }
                     events = bridge
                     bridge.start()
@@ -166,6 +226,7 @@ class MainActivity : FlutterActivity() {
                 override fun onCancel(arguments: Any?) {
                     events?.stop()
                     events = null
+                    EventHub.detach()
                 }
             })
 
