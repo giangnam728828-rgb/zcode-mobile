@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../services/modules.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
+import '../widgets/page_shell.dart';
 
 /// Optional CLI tools the agent can use. Everything installs into the app's
 /// private workspace, so no root, no system changes, and one tap to remove.
@@ -102,30 +104,20 @@ class _ModulesPageState extends State<ModulesPage> {
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
     final ModuleCenter? mc = state.moduleCenter;
-    final List<InstalledModule> installed = mc?.installed ?? <InstalledModule>[];
+    final List<InstalledModule> installed =
+        mc?.installed ?? <InstalledModule>[];
     final Set<String> ids = installed.map((InstalledModule m) => m.id).toSet();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(en ? 'Modules' : '扩展模块'),
-            Text(
-              en
-                  ? 'Extra CLI tools for the agent'
-                  : '给智能体补上手机缺的命令行工具',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w400,
-                color: cs.onSurface.withValues(alpha: 0.42),
-              ),
-            ),
-          ],
-        ),
+    return PageShell(
+      title: en ? 'Modules' : '扩展模块',
+      subtitle: Text(
+        en ? 'Extra CLI tools for the agent' : '给智能体补上手机缺的命令行工具',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 40),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+            AppTokens.gutter, AppTokens.s2, AppTokens.gutter, 40),
         children: <Widget>[
           _card(<Widget>[
             Row(
@@ -167,8 +159,8 @@ class _ModulesPageState extends State<ModulesPage> {
                 constraints: const BoxConstraints(maxHeight: 210),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F1319),
-                  borderRadius: BorderRadius.circular(9),
+                  color: const Color(0xFF0C1014),
+                  borderRadius: AppTokens.brXs,
                 ),
                 child: SingleChildScrollView(
                   child: SelectableText(
@@ -225,8 +217,7 @@ class _ModulesPageState extends State<ModulesPage> {
           if (installed.isNotEmpty) ...<Widget>[
             _section(en ? 'Installed' : '已安装', cs),
             for (final InstalledModule m in installed)
-              if (!ModuleCenter.catalog
-                  .any((ModuleSpec s) => s.id == m.id))
+              if (!ModuleCenter.catalog.any((ModuleSpec s) => s.id == m.id))
                 _installedCard(m, cs, en, state),
           ],
           _section(en ? 'Install from URL' : '从链接安装', cs),
@@ -305,14 +296,14 @@ class _ModulesPageState extends State<ModulesPage> {
 
   Widget _section(String title, ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+      padding: const EdgeInsets.fromLTRB(4, AppTokens.s5, 4, AppTokens.s2),
       child: Text(
         title,
         style: TextStyle(
-          fontSize: 11.5,
+          fontSize: 11,
           fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
-          color: cs.onSurface.withValues(alpha: 0.42),
+          letterSpacing: 0.4,
+          color: AppPalette.of(context).textTertiary,
         ),
       ),
     );
@@ -331,11 +322,9 @@ class _ModulesPageState extends State<ModulesPage> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Theme.of(context).dividerTheme.color ?? Colors.transparent,
-        ),
+        color: AppPalette.of(context).surface,
+        borderRadius: AppTokens.brLg,
+        border: Border.all(color: AppPalette.of(context).line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,11 +336,11 @@ class _ModulesPageState extends State<ModulesPage> {
                 height: 30,
                 decoration: BoxDecoration(
                   color: cs.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppTokens.brXs,
                 ),
                 alignment: Alignment.center,
-                child: Icon(Icons.terminal_rounded,
-                    size: 15, color: cs.primary),
+                child:
+                    Icon(Icons.terminal_rounded, size: 15, color: cs.primary),
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -372,8 +361,8 @@ class _ModulesPageState extends State<ModulesPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: cs.onSurface.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(4),
+                              color: AppPalette.of(context).surfaceRaised,
+                              borderRadius: AppTokens.brXs,
                             ),
                             child: Text(
                               c,
@@ -429,7 +418,7 @@ class _ModulesPageState extends State<ModulesPage> {
               child: LinearProgressIndicator(
                 value: progress > 0 ? progress : null,
                 minHeight: 2.5,
-                backgroundColor: cs.onSurface.withValues(alpha: 0.07),
+                backgroundColor: AppPalette.of(context).line,
               ),
             ),
           ],
@@ -444,11 +433,9 @@ class _ModulesPageState extends State<ModulesPage> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Theme.of(context).dividerTheme.color ?? Colors.transparent,
-        ),
+        color: AppPalette.of(context).surface,
+        borderRadius: AppTokens.brLg,
+        border: Border.all(color: AppPalette.of(context).line, width: 0.8),
       ),
       child: Row(
         children: <Widget>[
@@ -465,9 +452,7 @@ class _ModulesPageState extends State<ModulesPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  m.commands.isEmpty
-                      ? m.dir
-                      : m.commands.join(' · '),
+                  m.commands.isEmpty ? m.dir : m.commands.join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -494,11 +479,9 @@ class _ModulesPageState extends State<ModulesPage> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).dividerTheme.color ?? Colors.transparent,
-        ),
+        color: AppPalette.of(context).surface,
+        borderRadius: AppTokens.brLg,
+        border: Border.all(color: AppPalette.of(context).line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

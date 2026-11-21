@@ -8,6 +8,9 @@ import '../l10n/strings.dart';
 import '../platform/device_bridge.dart';
 import '../services/workspace.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
+import '../widgets/glass_header.dart';
+import '../widgets/page_shell.dart';
 
 /// Picks a folder on the phone itself.
 ///
@@ -122,9 +125,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
       if (!mounted) return;
       setState(() {
         _dirs = <Directory>[];
-        _error = _hasAccess
-            ? '打不开这个目录：$e'
-            : '还没有「所有文件访问权限」，只能看到应用自己的目录。';
+        _error = _hasAccess ? '打不开这个目录：$e' : '还没有「所有文件访问权限」，只能看到应用自己的目录。';
         _loading = false;
       });
     }
@@ -158,8 +159,8 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
   }
 
   Future<void> _manualPath() async {
-    final String? typed = await _prompt('直接输入路径', '/storage/emulated/0/ZCode',
-        initial: _path);
+    final String? typed =
+        await _prompt('直接输入路径', '/storage/emulated/0/ZCode', initial: _path);
     if (typed == null || typed.trim().isEmpty) return;
     final String p = typed.trim();
     if (!await Directory(p).exists()) {
@@ -230,31 +231,94 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
     final bool dark = theme.brightness == Brightness.dark;
     final bool sameAsNow = _path == app.workspacePath;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(en ? 'Choose workspace' : '选择工作区'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: en ? 'Hidden folders' : '显示隐藏目录',
-            icon: Icon(
-              _showHidden
-                  ? Icons.visibility_rounded
-                  : Icons.visibility_off_outlined,
-              size: 20,
-            ),
-            onPressed: () {
-              setState(() => _showHidden = !_showHidden);
-              _load();
-            },
+    return PageShell(
+      title: en ? 'Choose workspace' : '选择工作区',
+      subtitle: Text(
+        _path,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontFamily: 'monospace'),
+      ),
+      actions: <Widget>[
+        HeaderAction(
+          tooltip: en ? 'Hidden folders' : '显示隐藏目录',
+          icon: _showHidden
+              ? Icons.visibility_rounded
+              : Icons.visibility_off_outlined,
+          onTap: () {
+            setState(() => _showHidden = !_showHidden);
+            _load();
+          },
+        ),
+        HeaderAction(
+          tooltip: en ? 'Enter path' : '输入路径',
+          icon: Icons.keyboard_alt_outlined,
+          onTap: _manualPath,
+        ),
+      ],
+      bottomBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.folder_outlined,
+                  size: 16, color: cs.primary.withValues(alpha: 0.8)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _path,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _newFolder,
+                icon: const Icon(Icons.create_new_folder_outlined, size: 16),
+                label: Text(en ? 'New' : '新建',
+                    style: const TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: en ? 'Enter path' : '输入路径',
-            icon: const Icon(Icons.keyboard_alt_outlined, size: 20),
-            onPressed: _manualPath,
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cs.primary,
+                foregroundColor: cs.onPrimary,
+                disabledBackgroundColor: AppPalette.of(context).surfaceRaised,
+                disabledForegroundColor: AppPalette.of(context).textTertiary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: AppTokens.brMd),
+              ),
+              onPressed: _loading || _applying || sameAsNow ? null : _use,
+              child: _applying
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      sameAsNow
+                          ? (en ? 'Already the workspace' : '已经是当前工作区')
+                          : (en ? 'Use this folder' : '使用这个文件夹'),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+            ),
           ),
         ],
       ),
-      body: Column(
+      child: Column(
         children: <Widget>[
           if (DeviceBridge.isAndroid && !_hasAccess)
             _permissionBanner(cs, dark, en),
@@ -282,72 +346,6 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
           Expanded(child: _list(cs, dark, en)),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: BoxDecoration(
-            color: dark ? const Color(0xFF12151A) : Colors.white,
-            border: Border(
-              top: BorderSide(color: cs.onSurface.withValues(alpha: 0.07)),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Icon(Icons.folder_outlined,
-                      size: 16, color: cs.primary.withValues(alpha: 0.8)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _path,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: _newFolder,
-                    icon: const Icon(Icons.create_new_folder_outlined, size: 16),
-                    label: Text(en ? 'New' : '新建',
-                        style: const TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: _loading || _applying || sameAsNow ? null : _use,
-                  child: _applying
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(
-                          sameAsNow
-                              ? (en ? 'Already the workspace' : '已经是当前工作区')
-                              : (en ? 'Use this folder' : '使用这个文件夹'),
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -357,7 +355,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
       padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
       decoration: BoxDecoration(
         color: cs.primary.withValues(alpha: dark ? 0.14 : 0.07),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTokens.brMd,
         border: Border.all(color: cs.primary.withValues(alpha: 0.25)),
       ),
       child: Column(
@@ -431,7 +429,8 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
               v.label,
               style: TextStyle(
                 fontSize: 11.5,
-                color: active ? cs.primary : cs.onSurface.withValues(alpha: 0.75),
+                color:
+                    active ? cs.primary : cs.onSurface.withValues(alpha: 0.75),
               ),
             ),
             backgroundColor: active
@@ -488,7 +487,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
     return Center(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: AppTokens.brXs,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           child: Text(

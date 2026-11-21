@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +12,7 @@ import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../state/app_state.dart';
+import '../state/dock_visibility.dart';
 import '../theme/glass.dart';
 import '../theme/tokens.dart';
 import '../widgets/composer.dart';
@@ -57,27 +60,56 @@ class _ChatPageState extends State<ChatPage> {
   String? _quote;
   int _visibleLimit = 30;
 
+  double _lastPx = 0;
+  Timer? _dockTimer;
+
   @override
   void initState() {
     super.initState();
     // The list is reversed, so "at the bottom" is offset 0.
     _scroll.addListener(() {
       if (!_scroll.hasClients) return;
-      final bool stick = _scroll.position.pixels < 90;
+      final double px = _scroll.position.pixels;
+      final bool stick = px < 90;
       if (stick != _stick) {
         _stick = stick;
         if (mounted) setState(() {});
       }
-      final bool show = _scroll.position.pixels > 420;
+      final bool show = px > 420;
       if (show != _showJump) {
         _showJump = show;
         if (mounted) setState(() {});
       }
+      _trackDock(px);
     });
+  }
+
+  /// Reading back through history tucks the dock out of the way; scrolling
+  /// towards the newest message brings it back. Either way it returns by
+  /// itself after a moment, so a resting thumb is never stranded without
+  /// navigation.
+  void _trackDock(double px) {
+    final double delta = px - _lastPx;
+    _lastPx = px;
+    if (px < 40) {
+      DockVisibility.reset();
+    } else if (delta > 3) {
+      DockVisibility.set(true);
+    } else if (delta < -3) {
+      DockVisibility.reset();
+    }
+    if (DockVisibility.tucked.value) {
+      _dockTimer?.cancel();
+      _dockTimer = Timer(const Duration(milliseconds: 2600), () {
+        if (mounted) DockVisibility.reset();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _dockTimer?.cancel();
+    DockVisibility.reset();
     _scroll.dispose();
     _input.dispose();
     super.dispose();
@@ -157,8 +189,8 @@ class _ChatPageState extends State<ChatPage> {
                       s: s,
                       onPick: (String q) {
                         _input.text = q;
-                        _input.selection = TextSelection.collapsed(
-                            offset: _input.text.length);
+                        _input.selection =
+                            TextSelection.collapsed(offset: _input.text.length);
                       },
                       onFiles: _openFiles,
                       onTerminal: _openTerminal,
@@ -264,9 +296,7 @@ class _ChatPageState extends State<ChatPage> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
-              widget.s.isEnglish
-                  ? 'Load earlier messages'
-                  : '加载更早的消息',
+              widget.s.isEnglish ? 'Load earlier messages' : '加载更早的消息',
               style: TextStyle(
                 fontSize: 11.5,
                 color: cs.onSurface.withValues(alpha: 0.55),
@@ -369,7 +399,8 @@ class _ChatPageState extends State<ChatPage> {
       );
     }
     final String toolKey = m.tools
-        .map((ToolCall t) => '${t.status.index}:${t.output.length}:${t.input.length}')
+        .map((ToolCall t) =>
+            '${t.status.index}:${t.output.length}:${t.input.length}')
         .join(',');
     final String key = '${m.id}|${m.text.length}|${m.error}|${m.stopped}|'
         '${m.thinking.length}|${m.inputTokens}|${m.outputTokens}|'
@@ -399,9 +430,8 @@ class _ChatPageState extends State<ChatPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
-        content: Text(widget.s.isEnglish
-            ? 'Quoted — type your reply'
-            : '已引用，输入你的追问'),
+        content: Text(
+            widget.s.isEnglish ? 'Quoted — type your reply' : '已引用，输入你的追问'),
         duration: const Duration(milliseconds: 1400),
       ));
   }
@@ -419,8 +449,7 @@ class _ChatPageState extends State<ChatPage> {
         // Plugin commands expand into a normal prompt, so they run through the
         // same path as typed text.
         final String args = parts.skip(1).join(' ').trim();
-        final String? expanded =
-            state.customCommandPrompt(parts.first, args);
+        final String? expanded = state.customCommandPrompt(parts.first, args);
         if (expanded == null) {
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
@@ -455,8 +484,7 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
   }
 
-  Future<void> _runCommand(
-      AppState state, SlashCommand cmd, String arg) async {
+  Future<void> _runCommand(AppState state, SlashCommand cmd, String arg) async {
     final bool en = widget.s.isEnglish;
     switch (cmd.name) {
       case 'new':
@@ -613,8 +641,8 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _openWorkspace() async {
     final bool? changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) =>
-            WorkspacePickerPage(initialPath: context.read<AppState>().workspacePath),
+        builder: (_) => WorkspacePickerPage(
+            initialPath: context.read<AppState>().workspacePath),
       ),
     );
     if (!mounted || changed != true) return;
@@ -686,7 +714,8 @@ class _ChatPageState extends State<ChatPage> {
         builder: (BuildContext ctx, StateSetter setSheet) {
           final List<String> shown = files
               .where((String p) =>
-                  query.isEmpty || p.toLowerCase().contains(query.toLowerCase()))
+                  query.isEmpty ||
+                  p.toLowerCase().contains(query.toLowerCase()))
               .take(120)
               .toList();
           return SizedBox(
@@ -807,7 +836,10 @@ class _ChatPageState extends State<ChatPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.12),
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
@@ -828,7 +860,10 @@ class _ChatPageState extends State<ChatPage> {
                     style: TextStyle(
                       fontSize: 11.5,
                       height: 1.4,
-                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
+                      color: Theme.of(ctx)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -1073,17 +1108,14 @@ class _ChatPageState extends State<ChatPage> {
             en ? 'Automation' : '自动化'),
         _menuItem('workspace', Icons.smartphone_rounded,
             en ? 'Workspace folder' : '工作区文件夹'),
-        _menuItem('files', Icons.folder_open_rounded,
-            en ? 'Files' : '文件'),
-        _menuItem('terminal', Icons.terminal_rounded,
-            en ? 'Terminal' : '终端'),
-        _menuItem('modules', Icons.extension_outlined,
-            en ? 'Modules' : '扩展模块'),
+        _menuItem('files', Icons.folder_open_rounded, en ? 'Files' : '文件'),
+        _menuItem('terminal', Icons.terminal_rounded, en ? 'Terminal' : '终端'),
+        _menuItem('modules', Icons.extension_outlined, en ? 'Modules' : '扩展模块'),
         const PopupMenuDivider(height: 6),
         _menuItem('compact', Icons.compress_rounded,
             en ? 'Compact context' : '压缩上下文'),
-        _menuItem('undo', Icons.undo_rounded,
-            en ? 'Undo file changes' : '撤销本轮改动',
+        _menuItem(
+            'undo', Icons.undo_rounded, en ? 'Undo file changes' : '撤销本轮改动',
             enabled: state.canUndo),
         _menuItem('export', Icons.ios_share_rounded,
             en ? 'Export as Markdown' : '导出为 Markdown'),
@@ -1153,8 +1185,7 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  Future<void> _confirmDeleteMessage(
-      AppState state, ChatMessage m, S s) async {
+  Future<void> _confirmDeleteMessage(AppState state, ChatMessage m, S s) async {
     final bool? yes = await showDialog<bool>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
@@ -1193,9 +1224,8 @@ class _ChatPageState extends State<ChatPage> {
                       ? Icons.radio_button_checked
                       : Icons.radio_button_unchecked,
                   size: 18,
-                  color: m == cfg.model
-                      ? Theme.of(ctx).colorScheme.primary
-                      : null,
+                  color:
+                      m == cfg.model ? Theme.of(ctx).colorScheme.primary : null,
                 ),
                 title: Text(m, style: const TextStyle(fontSize: 14)),
                 onTap: () => Navigator.pop(ctx, m),
@@ -1389,19 +1419,19 @@ class _EmptyState extends StatelessWidget {
                 width: 0.8,
               ),
             ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(icon, size: 14, color: cs.primary.withValues(alpha: 0.85)),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: cs.onSurface.withValues(alpha: 0.72),
-              ),
-            ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(icon, size: 14, color: cs.primary.withValues(alpha: 0.85)),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: cs.onSurface.withValues(alpha: 0.72),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

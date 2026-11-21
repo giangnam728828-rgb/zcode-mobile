@@ -37,6 +37,20 @@ class AppTheme {
       background: p.bg,
       surface: p.surface,
       onSurface: p.text,
+      // Material 3 generates five surface-container steps from the seed, and
+      // every un-migrated screen still asks for them. Left alone they carry a
+      // hint of the accent and drift purple next to our neutral cards. Point
+      // the whole ramp at the token values so old code lands on the same
+      // palette instead of being repainted page by page.
+      surfaceContainerLowest: p.bg,
+      surfaceContainerLow: p.bgElevated,
+      surfaceContainer: p.bgElevated,
+      surfaceContainerHigh: p.surface,
+      surfaceContainerHighest: p.surfaceRaised,
+      outline: p.line,
+      outlineVariant: p.line,
+      // No tint-on-elevation: our layers already differ by value.
+      surfaceTint: Colors.transparent,
     );
 
     final ThemeData base = ThemeData(
@@ -91,6 +105,7 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         color: scheme.surface,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
@@ -119,22 +134,82 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            dark ? const Color(0xFF232A33) : const Color(0xFF23272E),
-        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        backgroundColor: p.surfaceRaised,
+        contentTextStyle: TextStyle(color: p.text, fontSize: 14),
+        actionTextColor: scheme.primary,
         shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            RoundedRectangleBorder(borderRadius: AppTokens.brSm),
+      ),
+      // The second-tier screens (automation, modules, plugins) have not been
+      // rebuilt yet. These defaults let them inherit the token look instead of
+      // each carrying its own M3 leftovers.
+      chipTheme: ChipThemeData(
+        backgroundColor: p.surfaceRaised,
+        selectedColor: scheme.primary.withValues(alpha: 0.16),
+        side: BorderSide(color: p.line, width: 0.8),
+        labelStyle: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w500,
+          color: p.textSecondary,
+        ),
+        secondaryLabelStyle: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: scheme.primary,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: AppTokens.brPill),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        showCheckmark: false,
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: p.text,
+        unselectedLabelColor: p.textTertiary,
+        indicatorColor: scheme.primary,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: p.line,
+        labelStyle: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+        unselectedLabelStyle:
+            const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith<Color>(
+          (Set<WidgetState> s) => s.contains(WidgetState.selected)
+              ? scheme.onPrimary
+              : p.textTertiary,
+        ),
+        trackColor: WidgetStateProperty.resolveWith<Color>(
+          (Set<WidgetState> s) => s.contains(WidgetState.selected)
+              ? scheme.primary
+              : p.lineStrong,
+        ),
+        trackOutlineColor: WidgetStateProperty.all<Color>(Colors.transparent),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: AppTokens.brMd),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: scheme.primary,
+        linearTrackColor: p.line,
+        circularTrackColor: p.line,
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: p.surface,
+        surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: p.surface,
+        surfaceTintColor: Colors.transparent,
         shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            RoundedRectangleBorder(borderRadius: AppTokens.brLg),
       ),
     );
   }

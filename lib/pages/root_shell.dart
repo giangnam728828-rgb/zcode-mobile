@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
+import '../state/dock_visibility.dart';
 import '../theme/glass.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_dock.dart';
@@ -62,7 +63,8 @@ class _RootShellState extends State<RootShell>
     final MediaQueryData mq = MediaQuery.of(context);
     final bool keyboard = mq.viewInsets.bottom > 0;
 
-    final double dockGap = keyboard ? 0 : AppDock.height + 26 + mq.padding.bottom;
+    final double dockGap =
+        keyboard ? 0 : AppDock.height + 26 + mq.padding.bottom;
 
     final List<Widget> pages = <Widget>[
       ChatPage(
@@ -142,22 +144,31 @@ class _RootShellState extends State<RootShell>
                 left: 12,
                 right: 12,
                 bottom: mq.padding.bottom + 10,
-                child: IgnorePointer(
-                  ignoring: keyboard,
-                  child: AnimatedSlide(
-                    duration: AppTokens.base,
-                    curve: AppTokens.emphasized,
-                    offset: Offset(0, keyboard ? 1.4 : 0),
-                    child: AnimatedOpacity(
-                      duration: AppTokens.fast,
-                      opacity: keyboard ? 0 : 1,
-                      child: AppDock(
-                        items: items,
-                        index: _index,
-                        onSelect: _select,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: DockVisibility.tucked,
+                  builder: (BuildContext ctx, bool tucked, Widget? _) {
+                    final bool away = keyboard || tucked;
+                    return IgnorePointer(
+                      ignoring: away,
+                      child: AnimatedSlide(
+                        duration: AppTokens.base,
+                        curve: AppTokens.emphasized,
+                        // Tucked only drops 0.55 of its height: the bar leans
+                        // out of the way instead of flying off, which makes it
+                        // obvious it is still there.
+                        offset: Offset(0, keyboard ? 1.4 : (tucked ? 0.55 : 0)),
+                        child: AnimatedOpacity(
+                          duration: keyboard ? AppTokens.fast : AppTokens.base,
+                          opacity: away ? 0 : 1,
+                          child: AppDock(
+                            items: items,
+                            index: _index,
+                            onSelect: _select,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
             ],

@@ -123,22 +123,27 @@ class AppPalette {
   /// Exposed as plain constants too: `AppPalette.dark.bg` is a field read, not
   /// a constant expression, so it cannot be used to initialise `const` fields.
   static const Color lightBg = Color(0xFFE9ECF1);
-  static const Color darkBg = Color(0xFF0A0C10);
+
+  /// Dark backdrop sits one step above pure black on purpose: on OLED a
+  /// #0A0C10 field reads as a hole, and the light pools behind the glass have
+  /// nothing to tint. At #101419 the layers above it can step in ~4% increments
+  /// and still show a visible edge, which is what the hairline borders need.
+  static const Color darkBg = Color(0xFF101419);
 
   static const AppPalette dark = AppPalette(
     brightness: Brightness.dark,
     bg: darkBg,
-    bgElevated: Color(0xFF0E1116),
-    surface: Color(0xFF14181E),
-    surfaceRaised: Color(0xFF1A1F26),
-    line: Color(0xFF232830),
-    lineStrong: Color(0xFF2E343D),
-    text: Color(0xFFE8EBEF),
-    textSecondary: Color(0xFFA6ADB8),
-    textTertiary: Color(0xFF6C7480),
+    bgElevated: Color(0xFF141920),
+    surface: Color(0xFF1A2028),
+    surfaceRaised: Color(0xFF212832),
+    line: Color(0xFF2C333D),
+    lineStrong: Color(0xFF39414D),
+    text: Color(0xFFE9ECF0),
+    textSecondary: Color(0xFFA9B0BB),
+    textTertiary: Color(0xFF737B87),
     glassTint: Color(0xFFFFFFFF),
-    glassStroke: Color(0x2EFFFFFF),
-    glassHighlight: Color(0x1AFFFFFF),
+    glassStroke: Color(0x2AFFFFFF),
+    glassHighlight: Color(0x17FFFFFF),
     accentWash: Color(0x1F7AA2FF),
   );
 

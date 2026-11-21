@@ -84,7 +84,9 @@ class GlassHeader extends StatelessWidget {
     if (!embedded) {
       return DecoratedBox(
         decoration: BoxDecoration(
-          color: p.bg,
+          // One step above the page: a bar at exactly the backdrop colour reads
+          // as a gap, not as a header.
+          color: p.bgElevated,
           border: border
               ? Border(bottom: BorderSide(color: p.line, width: 0.8))
               : null,

@@ -7,6 +7,10 @@ import '../agent/mcp.dart';
 import '../l10n/strings.dart';
 import '../services/plugins.dart';
 import '../state/app_state.dart';
+import '../theme/glass.dart';
+import '../theme/tokens.dart';
+import '../widgets/glass_header.dart';
+import '../widgets/page_shell.dart';
 import 'files_page.dart';
 
 /// Plugin hub: browse the bundled catalog, pull a manifest from a URL, and see
@@ -43,12 +47,29 @@ class _PluginsPageState extends State<PluginsPage>
     final ColorScheme cs = Theme.of(context).colorScheme;
     final PluginCenter? center = state.pluginCenter;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(en ? 'Plugins' : '插件'),
-        bottom: TabBar(
+    return PageShell(
+      title: en ? 'Plugins' : '插件',
+      subtitle: Text(
+        en
+            ? '${center?.installed.length ?? 0} installed · market and MCP servers'
+            : '${center?.installed.length ?? 0} 个已安装 · 市场与 MCP 服务',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      actions: <Widget>[
+        HeaderAction(
+          tooltip: en ? 'Install from URL' : '从链接安装',
+          icon: Icons.link_rounded,
+          onTap: () => _installFromUrl(state, en),
+        ),
+      ],
+      subHeader: Align(
+        alignment: Alignment.centerLeft,
+        child: TabBar(
           controller: _tabs,
           isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           tabs: <Widget>[
             Tab(text: en ? 'Market' : '插件市场'),
             Tab(
@@ -59,15 +80,8 @@ class _PluginsPageState extends State<PluginsPage>
             Tab(text: en ? 'MCP' : 'MCP 服务'),
           ],
         ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: en ? 'Install from URL' : '从链接安装',
-            icon: const Icon(Icons.link_rounded),
-            onPressed: () => _installFromUrl(state, en),
-          ),
-        ],
       ),
-      body: center == null
+      child: center == null
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabs,
@@ -123,28 +137,29 @@ class _PluginsPageState extends State<PluginsPage>
                       },
                     ),
               filled: true,
-              fillColor: cs.onSurface.withValues(alpha: 0.04),
+              fillColor: AppPalette.of(context).surfaceRaised,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppTokens.brSm,
                 borderSide: BorderSide.none,
               ),
             ),
           ),
         ),
-        SizedBox(
-          height: 36,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+        // No fixed height here: a ChoiceChip squeezed into 36dp clips its own
+        // label, which turned 「全部」 into 「全」.
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppTokens.gutter, vertical: 2),
+          child: Row(
             children: <Widget>[
               for (final String c in categories)
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(c, style: const TextStyle(fontSize: 11.5)),
+                  child: _CategoryPill(
+                    label: c,
                     selected: _category == c,
-                    onSelected: (bool _) => setState(() => _category = c),
-                    visualDensity: VisualDensity.compact,
+                    onTap: () => setState(() => _category = c),
                   ),
                 ),
             ],
@@ -192,9 +207,9 @@ class _PluginsPageState extends State<PluginsPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(13, 12, 12, 12),
       decoration: BoxDecoration(
-        color: cs.onSurface.withValues(alpha: 0.035),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
+        color: AppPalette.of(context).surface,
+        borderRadius: AppTokens.brLg,
+        border: Border.all(color: AppPalette.of(context).line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,7 +483,7 @@ class _PluginsPageState extends State<PluginsPage>
           padding: const EdgeInsets.fromLTRB(13, 10, 8, 10),
           decoration: BoxDecoration(
             color: cs.onSurface.withValues(alpha: 0.035),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: AppTokens.brLg,
             border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
           ),
           child: Column(
@@ -476,8 +491,7 @@ class _PluginsPageState extends State<PluginsPage>
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Text(p.manifest.emoji,
-                      style: const TextStyle(fontSize: 20)),
+                  Text(p.manifest.emoji, style: const TextStyle(fontSize: 20)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -522,7 +536,7 @@ class _PluginsPageState extends State<PluginsPage>
               const SizedBox(height: 4),
               InkWell(
                 onTap: () => _openPluginFiles(state, p, en),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppTokens.brXs,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
@@ -589,7 +603,8 @@ class _PluginsPageState extends State<PluginsPage>
                         ListTile(
                           dense: true,
                           leading: Icon(Icons.description_outlined,
-                              size: 18, color: cs.onSurface.withValues(alpha: 0.5)),
+                              size: 18,
+                              color: cs.onSurface.withValues(alpha: 0.5)),
                           title: Text(
                             f,
                             style: const TextStyle(
@@ -625,9 +640,8 @@ class _PluginsPageState extends State<PluginsPage>
 
   Widget _mcp(AppState state, bool en, ColorScheme cs) {
     final McpManager? manager = state.mcpManager;
-    final List<McpStatus> list = manager == null
-        ? <McpStatus>[]
-        : manager.statuses.values.toList();
+    final List<McpStatus> list =
+        manager == null ? <McpStatus>[] : manager.statuses.values.toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       children: <Widget>[
@@ -676,7 +690,7 @@ class _PluginsPageState extends State<PluginsPage>
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: cs.onSurface.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppTokens.brSm,
             ),
             child: Text(
               en
@@ -696,7 +710,7 @@ class _PluginsPageState extends State<PluginsPage>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: cs.onSurface.withValues(alpha: 0.035),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppTokens.brSm,
                 border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
               ),
               child: Row(
@@ -749,7 +763,8 @@ class _PluginsPageState extends State<PluginsPage>
                 ],
               ),
             ),
-        if (manager?.error != null && list.every((McpStatus s) => !s.ready)) ...[
+        if (manager?.error != null &&
+            list.every((McpStatus s) => !s.ready)) ...[
           const SizedBox(height: 4),
           Text(
             manager!.error!,
@@ -794,5 +809,60 @@ class _PluginsPageState extends State<PluginsPage>
         content: Text(text),
         duration: const Duration(milliseconds: 1800),
       ));
+  }
+}
+
+/// Hand-rolled instead of [ChoiceChip]: M3's chip derives its width from a
+/// label-padding formula that collapsed these two-character categories into
+/// ~40dp circles and clipped the second glyph.
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({
+    Key? key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  }) : super(key: key);
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme cs = Theme.of(context).colorScheme;
+    final AppPalette p = AppPalette.of(context);
+    return PressScale(
+      radius: 999,
+      scale: 1.02,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: AppTokens.fast,
+          curve: AppTokens.emphasized,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color:
+                selected ? cs.primary.withValues(alpha: 0.16) : p.surfaceRaised,
+            borderRadius: AppTokens.brPill,
+            border: Border.all(
+              color: selected ? cs.primary.withValues(alpha: 0.34) : p.line,
+              width: 0.8,
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.15,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? cs.primary : p.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

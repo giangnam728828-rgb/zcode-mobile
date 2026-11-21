@@ -6,6 +6,10 @@ import '../platform/a11y_bridge.dart';
 import '../platform/privilege_bridge.dart';
 import '../services/automation.dart';
 import '../state/app_state.dart';
+import '../theme/glass.dart';
+import '../theme/tokens.dart';
+import '../widgets/glass_header.dart';
+import '../widgets/page_shell.dart';
 
 /// Automation home: privilege status on top, the user's rules, then a small
 /// template shelf. Everything here is phone-specific — a desktop scheduler has
@@ -89,7 +93,8 @@ class _AutomationPageState extends State<AutomationPage> {
             }),
           ],
         );
-    final AutomationRule? saved = await Navigator.of(context).push<AutomationRule>(
+    final AutomationRule? saved =
+        await Navigator.of(context).push<AutomationRule>(
       MaterialPageRoute<AutomationRule>(
         builder: (_) => _RuleEditorPage(rule: working, isNew: rule == null),
       ),
@@ -130,7 +135,9 @@ class _AutomationPageState extends State<AutomationPage> {
               Row(
                 children: <Widget>[
                   Text('模板',
-                      style: Theme.of(ctx).textTheme.titleMedium
+                      style: Theme.of(ctx)
+                          .textTheme
+                          .titleMedium
                           ?.copyWith(fontWeight: FontWeight.w600)),
                   const Spacer(),
                   TextButton(
@@ -144,8 +151,7 @@ class _AutomationPageState extends State<AutomationPage> {
                       }
                       Navigator.pop(ctx);
                     },
-                    child: const Text('全部添加',
-                        style: TextStyle(fontSize: 12)),
+                    child: const Text('全部添加', style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
@@ -153,17 +159,24 @@ class _AutomationPageState extends State<AutomationPage> {
               Text('加进列表后可以再改触发条件和动作。',
                   style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+                      color: Theme.of(ctx)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.5))),
               const SizedBox(height: 12),
               ...list.map((AutomationRule t) => Card(
                     elevation: 0,
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: Theme.of(ctx).colorScheme.surfaceVariant.withValues(alpha: 0.35),
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .surfaceVariant
+                        .withValues(alpha: 0.35),
                     child: ListTile(
                       title: Text(t.name,
                           style: const TextStyle(
                               fontSize: 13.5, fontWeight: FontWeight.w600)),
-                      subtitle: Text('${t.trigger.summary} · ${t.actions.length} 个动作',
+                      subtitle: Text(
+                          '${t.trigger.summary} · ${t.actions.length} 个动作',
                           style: const TextStyle(fontSize: 11.5)),
                       trailing: TextButton(
                         onPressed: () {
@@ -214,47 +227,48 @@ class _AutomationPageState extends State<AutomationPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: 3,
-                minLines: 2,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(
-                  hintText: '例如：到家连上 Wi-Fi 就 git pull，然后通知我',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 3,
+                  minLines: 2,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: '例如：到家连上 Wi-Fi 就 git pull，然后通知我',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (String v) => text = v,
                 ),
-                onChanged: (String v) => text = v,
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: <String>[
-                  '每天 22:30 总结工作',
-                  '电量低于 20% 调暗',
-                  '验证码通知自动复制',
-                  '屏幕出现构建成功就朗读',
-                  '息屏 30 分钟整理笔记',
-                  '打开微信时点「打卡」',
-                ]
-                    .map((String sample) => ActionChip(
-                          label: Text(sample,
-                              style: const TextStyle(fontSize: 10.5)),
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () {
-                            controller.text = sample;
-                            text = sample;
-                          },
-                        ))
-                    .toList(),
-              ),
-              const SizedBox(height: 8),
-              Text('会先解析成规则，再打开编辑页给你确认。',
-                  style: TextStyle(
-                      fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.45))),
-            ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: <String>[
+                    '每天 22:30 总结工作',
+                    '电量低于 20% 调暗',
+                    '验证码通知自动复制',
+                    '屏幕出现构建成功就朗读',
+                    '息屏 30 分钟整理笔记',
+                    '打开微信时点「打卡」',
+                  ]
+                      .map((String sample) => ActionChip(
+                            label: Text(sample,
+                                style: const TextStyle(fontSize: 10.5)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              controller.text = sample;
+                              text = sample;
+                            },
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                Text('会先解析成规则，再打开编辑页给你确认。',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: cs.onSurface.withValues(alpha: 0.45))),
+              ],
             ),
           ),
           actions: <Widget>[
@@ -294,18 +308,13 @@ class _AutomationPageState extends State<AutomationPage> {
   Widget _a11yCard(AppState app, ColorScheme cs, bool en) {
     final A11yStatus st = app.a11y;
     final bool on = st.connected;
+    final AppPalette p = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: on
-            ? cs.tertiaryContainer.withValues(alpha: 0.25)
-            : cs.surfaceVariant.withValues(alpha: 0.32),
-        border: Border.all(
-          color: on
-              ? cs.tertiary.withValues(alpha: 0.3)
-              : cs.outline.withValues(alpha: 0.3),
-        ),
+        borderRadius: AppTokens.brLg,
+        color: p.surface,
+        border: Border.all(color: p.line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,15 +323,15 @@ class _AutomationPageState extends State<AutomationPage> {
             children: <Widget>[
               Icon(Icons.visibility_outlined,
                   size: 17,
-                  color: on ? cs.tertiary : cs.onSurface.withValues(alpha: 0.5)),
+                  color:
+                      on ? cs.tertiary : cs.onSurface.withValues(alpha: 0.5)),
               const SizedBox(width: 7),
               Text(en ? 'Screen & notifications' : '屏幕与通知',
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                   color: on
@@ -369,8 +378,8 @@ class _AutomationPageState extends State<AutomationPage> {
             runSpacing: 6,
             children: <Widget>[
               _capChip(en ? 'Screen' : '无障碍', st.connected, cs),
-              _capChip(en ? 'Notifications' : '通知读取',
-                  st.notificationListener, cs),
+              _capChip(
+                  en ? 'Notifications' : '通知读取', st.notificationListener, cs),
               if (st.foregroundLabel.isNotEmpty)
                 _capChip('前台：${st.foregroundLabel}', true, cs),
             ],
@@ -388,8 +397,8 @@ class _AutomationPageState extends State<AutomationPage> {
                   final bool ok =
                       await app.openA11ySettings(notifications: true);
                   if (!ok && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('没打开设置页，手动去 设置 → 通知使用权')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('没打开设置页，手动去 设置 → 通知使用权')));
                   }
                 },
                 icon: const Icon(Icons.notifications_outlined, size: 14),
@@ -450,7 +459,8 @@ class _AutomationPageState extends State<AutomationPage> {
               const SizedBox(height: 2),
               Text('${snap.nodes.length} 个可读元素',
                   style: TextStyle(
-                      fontSize: 11, color: cs.onSurface.withValues(alpha: 0.45))),
+                      fontSize: 11,
+                      color: cs.onSurface.withValues(alpha: 0.45))),
               const SizedBox(height: 10),
               if (snap.isEmpty)
                 Text('这一屏没有可读文字。有些应用（比如银行、游戏）会主动屏蔽。',
@@ -502,59 +512,41 @@ class _AutomationPageState extends State<AutomationPage> {
     final AutomationEngine? engine = app.automation;
     final ColorScheme cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(en ? 'Automation' : '自动化'),
-            Text(
-              engine == null
-                  ? '—'
-                  : (en
-                      ? '${engine.enabledRules.length} active · ${engine.todayRuns} runs today'
-                      : '${engine.enabledRules.length} 条启用 · 今天跑了 ${engine.todayRuns} 次'),
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w400,
-                color: cs.onSurface.withValues(alpha: 0.45),
-              ),
-            ),
-          ],
+    return PageShell(
+      title: en ? 'Automation' : '自动化',
+      subtitle: Text(
+        engine == null
+            ? '—'
+            : (en
+                ? '${engine.enabledRules.length} active · ${engine.todayRuns} runs today'
+                : '${engine.enabledRules.length} 条启用 · 今天跑了 ${engine.todayRuns} 次'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      actions: <Widget>[
+        HeaderAction(
+          tooltip: en ? 'One sentence → rule' : '一句话建规则',
+          icon: Icons.auto_awesome_rounded,
+          onTap: engine == null ? null : _quickRule,
         ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: en ? 'One sentence → rule' : '一句话建规则',
-            icon: const Icon(Icons.auto_awesome_rounded, size: 19),
-            onPressed: engine == null ? null : _quickRule,
-          ),
-          IconButton(
-            tooltip: en ? 'History' : '运行记录',
-            icon: const Icon(Icons.history_rounded, size: 20),
-            onPressed: engine == null ? null : _showLogs,
-          ),
-          IconButton(
-            tooltip: en ? 'Refresh privileges' : '重新检测权限',
-            icon: _refreshing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: _refreshing ? null : _refresh,
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: engine == null ? null : () => _edit(),
-        icon: const Icon(Icons.add_rounded, size: 20),
-        label: Text(en ? 'New rule' : '新建规则'),
-      ),
-      body: engine == null
+        HeaderAction(
+          tooltip: en ? 'History' : '运行记录',
+          icon: Icons.history_rounded,
+          onTap: engine == null ? null : _showLogs,
+        ),
+        HeaderAction(
+          tooltip: en ? 'Refresh privileges' : '重新检测权限',
+          icon: Icons.refresh_rounded,
+          onTap: _refreshing ? null : _refresh,
+          tint: _refreshing ? cs.primary : null,
+        ),
+      ],
+      floating: _newRuleButton(engine, en),
+      child: engine == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 122),
+              padding: const EdgeInsets.fromLTRB(
+                  AppTokens.gutter, AppTokens.s2, AppTokens.gutter, 96),
               children: <Widget>[
                 _privCard(app, cs, en),
                 const SizedBox(height: 10),
@@ -573,9 +565,13 @@ class _AutomationPageState extends State<AutomationPage> {
                       onSelected: (bool on) => _setAll(engine, on),
                       itemBuilder: (_) => <PopupMenuEntry<bool>>[
                         const PopupMenuItem<bool>(
-                            value: true, child: Text('全部启用', style: TextStyle(fontSize: 13))),
+                            value: true,
+                            child:
+                                Text('全部启用', style: TextStyle(fontSize: 13))),
                         const PopupMenuItem<bool>(
-                            value: false, child: Text('全部停用', style: TextStyle(fontSize: 13))),
+                            value: false,
+                            child:
+                                Text('全部停用', style: TextStyle(fontSize: 13))),
                       ],
                     ),
                     TextButton.icon(
@@ -589,12 +585,68 @@ class _AutomationPageState extends State<AutomationPage> {
                 if (engine.rules.isEmpty)
                   _empty(cs, en)
                 else
-                  ...engine.rules.map((AutomationRule r) =>
-                      _ruleCard(engine, r, cs, en)),
+                  ...engine.rules
+                      .map((AutomationRule r) => _ruleCard(engine, r, cs, en)),
                 const SizedBox(height: 18),
                 _onlyOnPhone(cs, en),
               ],
             ),
+    );
+  }
+
+  /// The one primary action on the page. Solid accent rather than glass: a
+  /// translucent pill over white cards has no edge to hold on to, and this is
+  /// the button people need to find first.
+  Widget _newRuleButton(AutomationEngine? engine, bool en) {
+    final ColorScheme cs = Theme.of(context).colorScheme;
+    final bool dark = Theme.of(context).brightness == Brightness.dark;
+    final bool on = engine != null;
+    // Dark mode uses the container tone: a tone-80 fill is the brightest thing
+    // on the screen and pulls the eye away from the rules it is meant to add.
+    final Color fill = dark ? cs.primaryContainer : cs.primary;
+    final Color ink = dark ? cs.onPrimaryContainer : cs.onPrimary;
+    return AnimatedOpacity(
+      duration: AppTokens.fast,
+      opacity: on ? 1 : 0.4,
+      child: PressScale(
+        radius: 999,
+        enabled: on,
+        child: GestureDetector(
+          onTap: on ? () => _edit() : null,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: AppTokens.brPill,
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: dark ? 0.35 : 0.16),
+                  blurRadius: 16,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 13, 18, 13),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.add_rounded, size: 18, color: ink),
+                  const SizedBox(width: 6),
+                  Text(
+                    en ? 'New rule' : '新建规则',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -614,8 +666,8 @@ class _AutomationPageState extends State<AutomationPage> {
             en
                 ? 'Start from a template, or create one from scratch.'
                 : '可以从模板加一条，也可以自己建。',
-            style:
-                TextStyle(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.4)),
+            style: TextStyle(
+                fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.4)),
           ),
         ],
       ),
@@ -625,16 +677,15 @@ class _AutomationPageState extends State<AutomationPage> {
   Widget _privCard(AppState app, ColorScheme cs, bool en) {
     final PrivStatus st = app.privilege;
     final bool strong = st.privileged;
+    final AppPalette p = AppPalette.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
+      // Neutral shell, coloured state: a tinted card that means "good" here
+      // would clash with the accent the user picked for the whole app.
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        color: strong
-            ? cs.primaryContainer.withValues(alpha: 0.35)
-            : cs.surfaceVariant.withValues(alpha: 0.4),
-        border: Border.all(
-          color: strong ? cs.primary.withValues(alpha: 0.3) : cs.outline.withValues(alpha: 0.35),
-        ),
+        borderRadius: AppTokens.brLg,
+        color: p.surface,
+        border: Border.all(color: p.line, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -644,13 +695,14 @@ class _AutomationPageState extends State<AutomationPage> {
               Icon(
                 strong ? Icons.shield_rounded : Icons.shield_outlined,
                 size: 17,
-                color: strong ? cs.primary : cs.onSurface.withValues(alpha: 0.5),
+                color:
+                    strong ? cs.primary : cs.onSurface.withValues(alpha: 0.5),
               ),
               const SizedBox(width: 7),
               Text(
                 en ? 'Privilege' : '权限',
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
               const SizedBox(width: 8),
               Container(
@@ -666,7 +718,9 @@ class _AutomationPageState extends State<AutomationPage> {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: strong ? cs.primary : cs.onSurface.withValues(alpha: 0.55),
+                    color: strong
+                        ? cs.primary
+                        : cs.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ),
@@ -680,7 +734,9 @@ class _AutomationPageState extends State<AutomationPage> {
                   ),
                   onPressed: _authorize,
                   child: Text(
-                    st.shizuku ? (en ? 'Grant' : '授权') : (en ? 'Set up' : '去开启'),
+                    st.shizuku
+                        ? (en ? 'Grant' : '授权')
+                        : (en ? 'Set up' : '去开启'),
                     style: const TextStyle(fontSize: 11.5),
                   ),
                 ),
@@ -690,7 +746,9 @@ class _AutomationPageState extends State<AutomationPage> {
           Text(
             st.unlocked,
             style: TextStyle(
-                fontSize: 11.5, height: 1.45, color: cs.onSurface.withValues(alpha: 0.6)),
+                fontSize: 11.5,
+                height: 1.45,
+                color: cs.onSurface.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -714,7 +772,9 @@ class _AutomationPageState extends State<AutomationPage> {
                   : 'root 或 Shizuku 能解锁系统开关、截屏、模拟点击和应用控制；'
                       '两者都没有时，规则依然可以发通知、跑命令、叫智能体干活。',
               style: TextStyle(
-                  fontSize: 10.5, height: 1.5, color: cs.onSurface.withValues(alpha: 0.42)),
+                  fontSize: 10.5,
+                  height: 1.5,
+                  color: cs.onSurface.withValues(alpha: 0.42)),
             ),
           ],
         ],
@@ -723,13 +783,12 @@ class _AutomationPageState extends State<AutomationPage> {
   }
 
   Widget _capChip(String label, bool ok, ColorScheme cs) {
+    final AppPalette p = AppPalette.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: ok
-            ? cs.primary.withValues(alpha: 0.1)
-            : cs.onSurface.withValues(alpha: 0.04),
+        borderRadius: AppTokens.brPill,
+        color: ok ? cs.primary.withValues(alpha: 0.12) : p.surfaceRaised,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -755,111 +814,116 @@ class _AutomationPageState extends State<AutomationPage> {
   Widget _ruleCard(
       AutomationEngine engine, AutomationRule rule, ColorScheme cs, bool en) {
     final DateTime? last = rule.lastRun;
-    final String lastLabel = last == null
-        ? (en ? 'never run' : '未运行')
-        : _ago(last, en);
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 8),
-      color: cs.surfaceVariant.withValues(alpha: rule.enabled ? 0.42 : 0.2),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _edit(rule),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(13, 11, 6, 11),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(
-                  _triggerIcon(rule.trigger.kind),
-                  size: 18,
-                  color: rule.enabled
-                      ? cs.primary
-                      : cs.onSurface.withValues(alpha: 0.3),
+    final String lastLabel =
+        last == null ? (en ? 'never run' : '未运行') : _ago(last, en);
+    final AppPalette p = AppPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTokens.s2),
+      child: Material(
+        color: rule.enabled ? p.surface : p.bgElevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTokens.brLg,
+          side: BorderSide(color: p.line, width: 0.8),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _edit(rule),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(13, 11, 6, 11),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    _triggerIcon(rule.trigger.kind),
+                    size: 18,
+                    color: rule.enabled
+                        ? cs.primary
+                        : cs.onSurface.withValues(alpha: 0.3),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      rule.name,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: rule.enabled
-                            ? cs.onSurface
-                            : cs.onSurface.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${rule.trigger.summary} · $lastLabel',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.onSurface.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    if (rule.lastResult.isNotEmpty && rule.enabled) ...[
-                      const SizedBox(height: 4),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
                       Text(
-                        rule.lastResult.split('\n').first,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        rule.name,
                         style: TextStyle(
-                          fontSize: 10.5,
-                          color: cs.onSurface.withValues(alpha: 0.36),
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: rule.enabled
+                              ? cs.onSurface
+                              : cs.onSurface.withValues(alpha: 0.45),
                         ),
                       ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${rule.trigger.summary} · $lastLabel',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurface.withValues(alpha: 0.45),
+                        ),
+                      ),
+                      if (rule.lastResult.isNotEmpty && rule.enabled) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          rule.lastResult.split('\n').first,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: cs.onSurface.withValues(alpha: 0.36),
+                          ),
+                        ),
+                      ],
                     ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: en ? 'Run now' : '立即运行',
+                  splashRadius: 18,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  onPressed: engine.busy ? null : () => _run(rule),
+                ),
+                Switch(
+                  value: rule.enabled,
+                  onChanged: (bool v) => engine.toggle(rule.id, v),
+                ),
+                PopupMenuButton<String>(
+                  splashRadius: 18,
+                  icon: const Icon(Icons.more_vert_rounded, size: 18),
+                  padding: EdgeInsets.zero,
+                  onSelected: (String v) {
+                    switch (v) {
+                      case 'dup':
+                        final AutomationRule copy = rule.copy()
+                          ..id = 'r${DateTime.now().microsecondsSinceEpoch}'
+                          ..name = '${rule.name} 副本'
+                          ..lastRunMs = 0
+                          ..runCount = 0;
+                        engine.add(copy);
+                        break;
+                      case 'delete':
+                        engine.remove(rule.id);
+                        break;
+                      case 'logs':
+                        _showLogs();
+                        break;
+                    }
+                  },
+                  itemBuilder: (_) => <PopupMenuEntry<String>>[
+                    PopupMenuItem<String>(
+                        value: 'dup', child: Text(en ? 'Duplicate' : '复制一份')),
+                    PopupMenuItem<String>(
+                        value: 'logs', child: Text(en ? 'History' : '运行记录')),
+                    PopupMenuItem<String>(
+                        value: 'delete', child: Text(en ? 'Delete' : '删除')),
                   ],
                 ),
-              ),
-              IconButton(
-                tooltip: en ? 'Run now' : '立即运行',
-                splashRadius: 18,
-                icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                onPressed: engine.busy ? null : () => _run(rule),
-              ),
-              Switch(
-                value: rule.enabled,
-                onChanged: (bool v) => engine.toggle(rule.id, v),
-              ),
-              PopupMenuButton<String>(
-                splashRadius: 18,
-                icon: const Icon(Icons.more_vert_rounded, size: 18),
-                padding: EdgeInsets.zero,
-                onSelected: (String v) {
-                  switch (v) {
-                    case 'dup':
-                      final AutomationRule copy = rule.copy()
-                        ..id = 'r${DateTime.now().microsecondsSinceEpoch}'
-                        ..name = '${rule.name} 副本'
-                        ..lastRunMs = 0
-                        ..runCount = 0;
-                      engine.add(copy);
-                      break;
-                    case 'delete':
-                      engine.remove(rule.id);
-                      break;
-                    case 'logs':
-                      _showLogs();
-                      break;
-                  }
-                },
-                itemBuilder: (_) => <PopupMenuEntry<String>>[
-                  PopupMenuItem<String>(
-                      value: 'dup', child: Text(en ? 'Duplicate' : '复制一份')),
-                  PopupMenuItem<String>(
-                      value: 'logs', child: Text(en ? 'History' : '运行记录')),
-                  PopupMenuItem<String>(
-                      value: 'delete', child: Text(en ? 'Delete' : '删除')),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -923,7 +987,8 @@ class _AutomationPageState extends State<AutomationPage> {
   static String _ago(DateTime at, bool en) {
     final Duration d = DateTime.now().difference(at);
     if (d.inMinutes < 1) return en ? 'just now' : '刚刚';
-    if (d.inMinutes < 60) return en ? '${d.inMinutes}m ago' : '${d.inMinutes} 分钟前';
+    if (d.inMinutes < 60)
+      return en ? '${d.inMinutes}m ago' : '${d.inMinutes} 分钟前';
     if (d.inHours < 24) return en ? '${d.inHours}h ago' : '${d.inHours} 小时前';
     return en ? '${d.inDays}d ago' : '${d.inDays} 天前';
   }
@@ -1002,18 +1067,34 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isNew ? '新建规则' : '编辑规则'),
-        actions: <Widget>[
-          TextButton(
-            onPressed: _save,
-            child: const Text('保存'),
-          ),
-        ],
+    return PageShell(
+      title: widget.isNew ? '新建规则' : '编辑规则',
+      subtitle: Text(
+        widget.isNew ? '触发条件 + 动作，保存后立刻生效' : '改动保存后立刻生效',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 32),
+      actions: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: TextButton(
+            onPressed: _save,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text('保存',
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary)),
+          ),
+        ),
+      ],
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+            AppTokens.gutter, AppTokens.s3, AppTokens.gutter, 32),
         children: <Widget>[
           TextField(
             controller: _nameField,
@@ -1080,7 +1161,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Text('还没有动作。至少加一个，否则规则什么也不做。',
                   style: TextStyle(
-                      fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.45))),
+                      fontSize: 11.5,
+                      color: cs.onSurface.withValues(alpha: 0.45))),
             ),
           ...List<Widget>.generate(_actions.length, (int i) {
             final AutomationAction a = _actions[i];
@@ -1147,8 +1229,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(
-                    isDense: true, suffixText: '分钟'),
+                decoration:
+                    const InputDecoration(isDense: true, suffixText: '分钟'),
                 onChanged: (String v) {
                   final int? n = int.tryParse(v);
                   if (n != null && n > 0) {
@@ -1165,10 +1247,10 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
     }
     final int hour = (_trigger.args['hour'] as num?)?.toInt() ?? 9;
     final int minute = (_trigger.args['minute'] as num?)?.toInt() ?? 0;
-    final List<int> days = ((_trigger.args['weekdays'] as List<dynamic>?) ??
-            const <dynamic>[])
-        .map((dynamic e) => (e as num).toInt())
-        .toList();
+    final List<int> days =
+        ((_trigger.args['weekdays'] as List<dynamic>?) ?? const <dynamic>[])
+            .map((dynamic e) => (e as num).toInt())
+            .toList();
     const List<String> names = <String>['一', '二', '三', '四', '五', '六', '日'];
     return Padding(
       padding: const EdgeInsets.only(top: 10),
@@ -1201,7 +1283,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               const SizedBox(width: 10),
               Text('每周的哪几天（不选＝每天）',
                   style: TextStyle(
-                      fontSize: 11, color: cs.onSurface.withValues(alpha: 0.45))),
+                      fontSize: 11,
+                      color: cs.onSurface.withValues(alpha: 0.45))),
             ],
           ),
           const SizedBox(height: 8),
@@ -1210,8 +1293,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
             children: <Widget>[
               for (int i = 1; i <= 7; i++)
                 FilterChip(
-                  label: Text(names[i - 1],
-                      style: const TextStyle(fontSize: 11)),
+                  label:
+                      Text(names[i - 1], style: const TextStyle(fontSize: 11)),
                   selected: days.contains(i),
                   onSelected: (bool v) {
                     final List<int> next = List<int>.from(days);
@@ -1282,13 +1365,13 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
           labelStyle: const TextStyle(fontSize: 12),
           border: const OutlineInputBorder(),
           helperText: 'Android 10 起读取完整 SSID 需要定位权限，读不到时按「任意 Wi-Fi」处理。',
-          helperStyle:
-              TextStyle(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.4)),
+          helperStyle: TextStyle(
+              fontSize: 10, color: cs.onSurface.withValues(alpha: 0.4)),
         ),
         style: const TextStyle(fontSize: 13),
         onChanged: (String v) {
-          _trigger = AutomationTrigger(
-              'wifi_on', <String, dynamic>{'ssid': v.trim()});
+          _trigger =
+              AutomationTrigger('wifi_on', <String, dynamic>{'ssid': v.trim()});
         },
       ),
     );
@@ -1298,8 +1381,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
     final String app = '${_trigger.args['app'] ?? ''}';
     final String keyword = '${_trigger.args['keyword'] ?? ''}';
     void put(String key, String value) {
-      final Map<String, dynamic> next =
-          Map<String, dynamic>.from(_trigger.args)..[key] = value.trim();
+      final Map<String, dynamic> next = Map<String, dynamic>.from(_trigger.args)
+        ..[key] = value.trim();
       _trigger = AutomationTrigger('notification', next);
       setState(() {});
     }
@@ -1399,7 +1482,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
             alignment: Alignment.centerLeft,
             child: Text('需要无障碍服务（不用 root）。',
                 style: TextStyle(
-                    fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.45))),
+                    fontSize: 10.5,
+                    color: cs.onSurface.withValues(alpha: 0.45))),
           ),
         ],
       ),
@@ -1419,8 +1503,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
           isDense: true,
           border: const OutlineInputBorder(),
           helperText: '每次切到新界面时会读一次，30 秒内不会重复触发。',
-          helperStyle:
-              TextStyle(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.4)),
+          helperStyle: TextStyle(
+              fontSize: 10, color: cs.onSurface.withValues(alpha: 0.4)),
         ),
         onChanged: (String v) {
           _trigger = AutomationTrigger(
@@ -1454,8 +1538,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
           SizedBox(
             width: 64,
             child: Text('$minutes 分钟',
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12)),
+                textAlign: TextAlign.end, style: const TextStyle(fontSize: 12)),
           ),
         ],
       ),
@@ -1478,14 +1561,16 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
         expand: false,
         initialChildSize: 0.6,
         maxChildSize: 0.92,
-        builder: (BuildContext c, ScrollController controller) => ListView.builder(
+        builder: (BuildContext c, ScrollController controller) =>
+            ListView.builder(
           controller: controller,
           itemCount: apps.length,
           itemBuilder: (BuildContext c, int i) {
             final Map<String, String> a = apps[i];
             return ListTile(
               dense: true,
-              title: Text(a['label'] ?? '', style: const TextStyle(fontSize: 13)),
+              title:
+                  Text(a['label'] ?? '', style: const TextStyle(fontSize: 13)),
               subtitle: Text(a['package'] ?? '',
                   style: const TextStyle(fontSize: 10.5)),
               onTap: () => Navigator.pop(
@@ -1500,8 +1585,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
     final String label = cut < 0 ? picked : picked.substring(0, cut);
     final String pkg = cut < 0 ? '' : picked.substring(cut + 1);
     setState(() {
-      _trigger = AutomationTrigger('app_foreground',
-          <String, dynamic>{'label': label, 'package': pkg});
+      _trigger = AutomationTrigger(
+          'app_foreground', <String, dynamic>{'label': label, 'package': pkg});
     });
   }
 
@@ -1563,7 +1648,8 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
             'title': 'ZCode',
             'body': '',
           });
-    final AutomationAction? result = await showModalBottomSheet<AutomationAction>(
+    final AutomationAction? result =
+        await showModalBottomSheet<AutomationAction>(
       context: context,
       isScrollControlled: true,
       builder: (BuildContext ctx) =>
@@ -1644,8 +1730,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
                   onTap: () {
                     Navigator.pop(ctx);
                     setState(() {
-                      _trigger = AutomationTrigger(r[0],
-                          _defaultArgs(r[0]));
+                      _trigger = AutomationTrigger(r[0], _defaultArgs(r[0]));
                     });
                   },
                 ),
@@ -1757,8 +1842,9 @@ class _ActionSheetState extends State<_ActionSheet> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               const _SheetHandle(),
-              Text(_title, style: const TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w600)),
+              Text(_title,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
               const SizedBox(height: 12),
               ..._fields(cs, app),
               const SizedBox(height: 14),
@@ -1838,7 +1924,8 @@ class _ActionSheetState extends State<_ActionSheet> {
           const SizedBox(height: 8),
           Text(
             '自动化里的智能体会自动批准工具调用（没人在旁边点确认），所以提示词要写清楚边界。',
-            style: TextStyle(fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.42)),
+            style: TextStyle(
+                fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.42)),
           ),
         ];
       case 'shell':
@@ -1877,7 +1964,8 @@ class _ActionSheetState extends State<_ActionSheet> {
               padding: const EdgeInsets.only(top: 6),
               child: Text('选 root/Shizuku 时当前不可用，规则会报错而不是假装成功。',
                   style: TextStyle(
-                      fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.4))),
+                      fontSize: 10.5,
+                      color: cs.onSurface.withValues(alpha: 0.4))),
             ),
         ];
       case 'notify':
@@ -1955,8 +2043,7 @@ class _ActionSheetState extends State<_ActionSheet> {
         ];
       case 'a11y':
         final String rawOp = '${_args['op'] ?? 'click'}';
-        final String op = A11yAction.all
-                .any((A11yAction a) => a.id == rawOp)
+        final String op = A11yAction.all.any((A11yAction a) => a.id == rawOp)
             ? rawOp
             : 'click';
         final bool connected = app.a11y.connected;
@@ -1983,8 +2070,7 @@ class _ActionSheetState extends State<_ActionSheet> {
               initialValue: '${_args['text'] ?? ''}',
               style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
-                labelText:
-                    op == 'input' ? '输入框的提示文字（可留空）' : '要操作的文字',
+                labelText: op == 'input' ? '输入框的提示文字（可留空）' : '要操作的文字',
                 hintText: op == 'input' ? '搜索' : '打卡',
                 isDense: true,
                 border: const OutlineInputBorder(),
@@ -2029,8 +2115,9 @@ class _ActionSheetState extends State<_ActionSheet> {
             style: TextStyle(
                 fontSize: 10.5,
                 height: 1.4,
-                color:
-                    connected ? cs.onSurface.withValues(alpha: 0.45) : cs.error),
+                color: connected
+                    ? cs.onSurface.withValues(alpha: 0.45)
+                    : cs.error),
           ),
         ];
       case 'speak':
@@ -2139,7 +2226,8 @@ class _SheetHandle extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12, top: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.18),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.18),
         ),
       ),
     );
@@ -2186,7 +2274,8 @@ class _LogSheet extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text('还没有执行记录。',
                     style: TextStyle(
-                        fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45))),
+                        fontSize: 12,
+                        color: cs.onSurface.withValues(alpha: 0.45))),
               ),
             ...engine.logs.map((AutomationLog l) => Container(
                   margin: const EdgeInsets.only(bottom: 8),

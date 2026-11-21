@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../models/conversation.dart';
 import '../state/app_state.dart';
+import '../theme/tokens.dart';
 import 'settings_page.dart';
 
 /// Conversation list used both as the phone drawer and as the wide-screen
@@ -43,14 +44,14 @@ class _SessionsPanelState extends State<SessionsPanel> {
     final AppState state = context.watch<AppState>();
     final S s = widget.s;
 
-    final List<Conversation> visible = state.conversations.where((Conversation c) {
+    final List<Conversation> visible =
+        state.conversations.where((Conversation c) {
       if (c.archived != _showArchived) return false;
       if (_query.isEmpty) return true;
       final String q = _query.toLowerCase();
       if (c.previewTitle().toLowerCase().contains(q)) return true;
-      return c.messages.any((dynamic m) => (m.text as String)
-          .toLowerCase()
-          .contains(q));
+      return c.messages
+          .any((dynamic m) => (m.text as String).toLowerCase().contains(q));
     }).toList();
 
     final List<Conversation> pinned =
@@ -80,9 +81,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
         state.conversations.where((Conversation c) => c.archived).length;
 
     return Container(
-      color: theme.brightness == Brightness.dark
-          ? const Color(0xFF0A0C10)
-          : const Color(0xFFFAFBFC),
+      color: AppPalette.of(context).surface,
       child: SafeArea(
         child: Column(
           children: <Widget>[
@@ -94,15 +93,8 @@ class _SessionsPanelState extends State<SessionsPanel> {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: <Color>[
-                          cs.primary,
-                          cs.primary.withValues(alpha: 0.72),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(9),
+                      color: cs.primary,
+                      borderRadius: AppTokens.brXs,
                     ),
                     alignment: Alignment.center,
                     child: const Icon(Icons.bolt_rounded,
@@ -160,19 +152,17 @@ class _SessionsPanelState extends State<SessionsPanel> {
                         const BoxConstraints(minWidth: 34, minHeight: 30),
                     contentPadding:
                         const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                    fillColor: theme.brightness == Brightness.dark
-                        ? const Color(0xFF141821)
-                        : Colors.white,
+                    fillColor: AppPalette.of(context).surfaceRaised,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: AppTokens.brSm,
                       borderSide: BorderSide(
-                        color: cs.onSurface.withValues(alpha: 0.10),
+                        color: AppPalette.of(context).line,
                       ),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: AppTokens.brSm,
                       borderSide: BorderSide(
-                        color: cs.onSurface.withValues(alpha: 0.10),
+                        color: AppPalette.of(context).line,
                       ),
                     ),
                     suffixIcon: _query.isEmpty
@@ -206,7 +196,8 @@ class _SessionsPanelState extends State<SessionsPanel> {
                       children: <Widget>[
                         if (pinned.isNotEmpty) ...<Widget>[
                           _groupHeader(s.pinned, cs),
-                          ...pinned.map((Conversation c) => _tile(c, state, cs)),
+                          ...pinned
+                              .map((Conversation c) => _tile(c, state, cs)),
                         ],
                         if (today.isNotEmpty) ...<Widget>[
                           _groupHeader(s.today, cs),
@@ -245,9 +236,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
         child: Row(
           children: <Widget>[
             Icon(
-              _showArchived
-                  ? Icons.unarchive_outlined
-                  : Icons.archive_outlined,
+              _showArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
               size: 15,
               color: cs.onSurface.withValues(alpha: 0.45),
             ),
@@ -280,7 +269,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
       child: Container(
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(color: cs.onSurface.withValues(alpha: 0.08)),
+            top: BorderSide(color: AppPalette.of(context).line, width: 0.8),
           ),
         ),
         padding: const EdgeInsets.fromLTRB(18, 13, 14, 13),
@@ -315,7 +304,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.4,
-          color: cs.onSurface.withValues(alpha: 0.38),
+          color: AppPalette.of(context).textTertiary,
         ),
       ),
     );
@@ -329,9 +318,9 @@ class _SessionsPanelState extends State<SessionsPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       child: Material(
         color: active ? cs.primary.withValues(alpha: 0.10) : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTokens.brSm,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppTokens.brSm,
           onTap: () {
             state.selectConversation(c.id);
             widget.onPicked?.call();

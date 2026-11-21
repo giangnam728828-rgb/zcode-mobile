@@ -10,6 +10,7 @@ import 'models/chat_message.dart';
 import 'models/conversation.dart';
 import 'pages/home_shell.dart';
 import 'pages/automation_page.dart';
+import 'pages/login_page.dart';
 import 'pages/modules_page.dart';
 import 'pages/plugins_page.dart';
 import 'pages/settings_page.dart';
@@ -36,6 +37,8 @@ Widget _pageFor(String? page) {
       return const SettingsPage();
     case 'workspace':
       return const WorkspacePickerPage();
+    case 'login':
+      return const LoginPage();
     default:
       return HomeShell(
         initialTab: int.tryParse(Uri.base.queryParameters['tab'] ?? '') ?? 0,

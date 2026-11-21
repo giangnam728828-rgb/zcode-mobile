@@ -522,3 +522,63 @@ P2（设置页分组、文件/终端顶栏、气泡与工具卡收敛到令牌�
 ### 9.5 预览方法的一个坑
 
 `flutter build web` 的 CanvasKit 会按 unicode 分块从 `fonts.gstatic.com` 拉 CJK 回退字体。截图时如果刚滚动完就拍，部分汉字/标点会显示成豆腐块（空方框）；多等几秒或再滚 1px 触发重绘就恢复。**这是网页预览特有的现象**，APK 用系统字体，不受影响。
+
+---
+
+## 十、P3 落地记录（v3.7.0）
+
+P3 的目标是让二级页面不再像"另一个 App"：自动化、扩展模块、插件、工作区选择、登录、会话抽屉。这些页面此前仍用 Material 默认的 `surfaceContainer` 色阶与 12/14/16 混编圆角。
+
+### 10.1 先改主题，再改页面
+
+`ColorScheme.fromSeed` 会生成五级 `surfaceContainer`（带种色），未迁移的页面全在用它，深色下整体偏紫。逐页替换是 5000 行的体力活，且有漏改风险。改为在 `app_theme.dart` 里把整条色阶指到令牌：
+
+| M3 槽位 | 令牌 |
+|---|---|
+| `surfaceContainerLowest` | `p.bg` |
+| `surfaceContainerLow` / `surfaceContainer` | `p.bgElevated` |
+| `surfaceContainerHigh` | `p.surface` |
+| `surfaceContainerHighest` | `p.surfaceRaised` |
+| `outline` / `outlineVariant` | `p.line` |
+| `surfaceTint` | 透明（层级只靠明度，不靠染色） |
+
+同时补齐 `chipTheme` / `tabBarTheme` / `switchTheme` / `floatingActionButtonTheme` / `progressIndicatorTheme`，让还没重排的控件也继承令牌。
+
+### 10.2 统一外壳 `lib/widgets/page_shell.dart`
+
+二级页面共用 `PageShell(title, subtitle, actions, subHeader, bottomBar, floating, child)`：
+
+- 背景 `LiquidBackground(drift: false)`：光斑静态，不给子页面白付每帧变换；
+- 顶栏用 `GlassHeader(embedded: false)`，颜色取 `bgElevated` 而不是 `bg`——与背景同色时顶栏读作"缺口"而不是"条";
+- `subHeader` 承接插件页的 TabBar；`bottomBar` 承接工作区页的确认栏（自带安全区与上边线）；
+- `floating` 只负责定位，按钮长什么样由调用方决定。
+
+### 10.3 各页改动
+
+| 页面 | 改动 |
+|---|---|
+| 自动化 | 两张状态卡从 `primaryContainer`/`tertiaryContainer` 半透明改中性 `surface` + 发丝边，状态只由图标与徽章表达；规则卡改 `Material` + 形状边（禁用态降一档底色而非整体变淡）；新建按钮从 Material FAB 改主色胶囊 |
+| 扩展模块 | 卡片圆角/边框走令牌；终端输出块统一为工具卡那块 `#0C1014`；分组标题与设置页 `_Group` 对齐 |
+| 插件 | TabBar 移到 `subHeader` 并左对齐；分类 chip 改自绘胶囊；插件卡从 3.5% 半透明白改实色 `surface` |
+| 工作区选择 | 头部与底部确认栏并入 `PageShell`；主按钮显式设主色/禁用色 |
+| 登录 | 去掉蓝→青渐变 logo（最模板化的一处），改单色主色块；错误块改 `cs.error`；提供方按钮改 `surface` + `line`；背景接光斑 |
+| 会话抽屉 | 底色交还 `RootShell`（避免两层不一致）；logo 去渐变；搜索框与列表项令牌化 |
+
+### 10.4 Dock 滚动收起
+
+`lib/state/dock_visibility.dart` 一个 `ValueNotifier<bool>`，对话页在滚动监听里按方向写入，`RootShell` 用 `ValueListenableBuilder` 消费。
+
+- 向历史方向滚 > 3px 且偏移 > 40 → 收起（`offset 0.55`，不完全飞出）；
+- 反向滚动或回到顶部 → 立即恢复；
+- 收起后 2.6s 自动恢复——**这是可达性底线**：dock 是唯一的导航，不能靠"记得往回滚"才能切页；
+- 页面销毁时 `reset()`，新页面不会以"没有 dock"的状态打开。
+
+### 10.5 本轮修掉的三个错误
+
+| 问题 | 原因 | 修法 |
+|---|---|---|
+| 分类 chip 变成 40dp 圆形、第二个字被裁 | M3 `RawChip` 用 labelPadding 公式反推宽度，两字中文被算窄 | 改自绘 `_CategoryPill`，宽度由文本 + padding 决定 |
+| 插件页 chip 行 `SizedBox(height: 36)` 压缩 chip | 固定高度小于 chip 的最小高度 | 去掉固定高度，改 `SingleChildScrollView + Row` |
+| 二级页顶栏与背景同色，读作缺口 | `bgElevated == bg` 时无层次 | 顶栏改用 `bgElevated` |
+
+> 顺带记一个预览陷阱：网页预览的 CJK 字体按 unicode 分块从 `fonts.gstatic.com` 拉，偶尔整屏汉字变豆腐块。与布局无关，等 30s 或滚动 1px 触发重绘即恢复；APK 用系统字体不受影响。
