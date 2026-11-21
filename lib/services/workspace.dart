@@ -21,6 +21,26 @@ class WorkspaceResolver {
     return '${base.path}/workspace';
   }
 
+  /// v3.1 and earlier kept everything under the app's private support dir.
+  /// Upgrading users should not think their files vanished, so that folder is
+  /// still honoured while it holds real content.
+  static Future<String?> legacyWorkspace() async {
+    try {
+      final Directory base = await getApplicationSupportDirectory();
+      final Directory old = Directory('${base.path}/workspace');
+      if (!await old.exists()) return null;
+      final List<FileSystemEntity> items = await old.list().toList();
+      for (final FileSystemEntity e in items) {
+        final String name = e.path.split('/').last;
+        if (name == '.zcode' || name == '.tmp' || name == 'README.md') continue;
+        return old.path;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Best guess for a first run: `Internal storage/ZCode`, else the sandbox.
   static Future<String> suggest() async {
     if (DeviceBridge.isAndroid) {

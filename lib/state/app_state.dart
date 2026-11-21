@@ -115,6 +115,13 @@ class AppState extends ChangeNotifier {
     if (saved != null && await WorkspaceResolver.ensureWritable(saved)) {
       return saved;
     }
+    // Upgrading from a private-directory workspace: keep it until the user
+    // deliberately moves, otherwise their files look lost.
+    final String? legacy = await WorkspaceResolver.legacyWorkspace();
+    if (legacy != null) {
+      await Store.saveWorkspace(legacy);
+      return legacy;
+    }
     final String suggestion = await WorkspaceResolver.suggest();
     await Store.saveWorkspace(suggestion);
     return suggestion;
