@@ -109,11 +109,24 @@ class A11yBridge {
     _status = next;
   }
 
+  /// Every bridge call gets a deadline: a wedged accessibility node must fail
+  /// the rule, not freeze the whole automation queue.
+  static const Duration _deadline = Duration(seconds: 8);
+
+  static Future<T?> _call<T>(String method,
+      [Map<String, dynamic>? args]) async {
+    try {
+      return await _channel.invokeMethod<T>(method, args).timeout(_deadline);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<A11yStatus> refresh() async {
     if (!isAndroid) return _status;
     try {
       final Map<Object?, Object?>? raw =
-          await _channel.invokeMethod<Map<Object?, Object?>>('a11yStatus');
+          await _call<Map<Object?, Object?>>('a11yStatus');
       if (raw != null) {
         _status = A11yStatus(
           enabled: raw['enabled'] == true,
@@ -131,7 +144,7 @@ class A11yBridge {
   static Future<bool> openSettings({bool notifications = false}) async {
     if (!isAndroid) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11yEnable', <String, dynamic>{
+      return await _call<bool>('a11yEnable', <String, dynamic>{
             'notifications': notifications,
           }) ??
           false;
@@ -144,8 +157,8 @@ class A11yBridge {
   static Future<A11ySnapshot> snapshot({int limit = 60}) async {
     if (!isAndroid) return const A11ySnapshot.empty();
     try {
-      final Map<Object?, Object?>? raw = await _channel
-          .invokeMethod<Map<Object?, Object?>>('a11ySnapshot', <String, dynamic>{
+      final Map<Object?, Object?>? raw =
+          await _call<Map<Object?, Object?>>('a11ySnapshot', <String, dynamic>{
         'limit': limit,
       });
       if (raw == null) return const A11ySnapshot.empty();
@@ -185,7 +198,7 @@ class A11yBridge {
   }) async {
     if (!isAndroid || text.isEmpty) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11yClick', <String, dynamic>{
+      return await _call<bool>('a11yClick', <String, dynamic>{
             'text': text,
             'index': index,
             'desc': byDesc,
@@ -200,7 +213,7 @@ class A11yBridge {
   static Future<bool> setText(String text, {String target = ''}) async {
     if (!isAndroid) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11ySetText', <String, dynamic>{
+      return await _call<bool>('a11ySetText', <String, dynamic>{
             'text': text,
             'target': target,
           }) ??
@@ -213,7 +226,7 @@ class A11yBridge {
   static Future<bool> scroll({bool forward = true, int times = 1}) async {
     if (!isAndroid) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11yScroll', <String, dynamic>{
+      return await _call<bool>('a11yScroll', <String, dynamic>{
             'forward': forward,
             'times': times,
           }) ??
@@ -228,7 +241,7 @@ class A11yBridge {
   static Future<bool> global(String action) async {
     if (!isAndroid || action.isEmpty) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11yGlobal', <String, dynamic>{
+      return await _call<bool>('a11yGlobal', <String, dynamic>{
             'action': action,
           }) ??
           false;
@@ -240,7 +253,7 @@ class A11yBridge {
   static Future<bool> tap(int x, int y) async {
     if (!isAndroid) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11yTap', <String, dynamic>{
+      return await _call<bool>('a11yTap', <String, dynamic>{
             'x': x,
             'y': y,
           }) ??
@@ -259,7 +272,7 @@ class A11yBridge {
   }) async {
     if (!isAndroid) return false;
     try {
-      return await _channel.invokeMethod<bool>('a11ySwipe', <String, dynamic>{
+      return await _call<bool>('a11ySwipe', <String, dynamic>{
             'x': x1,
             'y': y1,
             'x2': x2,
@@ -276,7 +289,7 @@ class A11yBridge {
   static Future<bool> speak(String text) async {
     if (!isAndroid || text.isEmpty) return false;
     try {
-      return await _channel.invokeMethod<bool>('speak', <String, dynamic>{
+      return await _call<bool>('speak', <String, dynamic>{
             'text': text,
           }) ??
           false;

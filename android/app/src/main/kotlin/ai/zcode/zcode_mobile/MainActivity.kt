@@ -159,7 +159,18 @@ class MainActivity : FlutterActivity() {
                         "a11ySnapshot" -> {
                             val limit = call.argument<Int>("limit") ?: 60
                             worker.execute {
-                                val snap = A11yOps.snapshot(limit)
+                                // A recycled node can throw; never leave the
+                                // Dart future hanging without an answer.
+                                val snap = try {
+                                    A11yOps.snapshot(limit)
+                                } catch (e: Throwable) {
+                                    hashMapOf<String, Any>(
+                                        "connected" to A11yState.connected,
+                                        "package" to "",
+                                        "text" to "",
+                                        "nodes" to ArrayList<Map<String, Any>>()
+                                    )
+                                }
                                 main.post { result.success(snap) }
                             }
                         }

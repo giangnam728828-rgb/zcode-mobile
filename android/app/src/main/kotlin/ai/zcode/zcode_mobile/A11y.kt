@@ -121,7 +121,11 @@ class ZcodeAccessibilityService : AccessibilityService() {
         // A snapshot on every window change is what makes "screen shows X"
         // rules possible without polling. Keep it small: 600 characters is
         // plenty for a keyword match and cheap to pass across the bridge.
-        val snapshot = A11yOps.snapshot(60, 600)
+        val snapshot = try {
+            A11yOps.snapshot(60, 600)
+        } catch (e: Throwable) {
+            emptyMap<String, Any>()
+        }
         val text = "${snapshot["text"] ?: ""}"
         if (text.isNotEmpty()) {
             EventHub.emit(
