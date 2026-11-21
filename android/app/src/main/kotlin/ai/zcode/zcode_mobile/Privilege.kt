@@ -348,7 +348,8 @@ object Privilege {
         val pkg = if (target.contains(".")) {
             target
         } else {
-            installedApps(context, target).firstOrNull()?.get("package") ?: target
+            (installedApps(context, target).firstOrNull()?.get("package") as? String)
+                ?: target
         }
         val intent = pm.getLaunchIntentForPackage(pkg) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
