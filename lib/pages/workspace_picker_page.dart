@@ -266,13 +266,13 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
               child: Row(
                 children: <Widget>[
                   Icon(Icons.sd_storage_outlined,
-                      size: 13, color: cs.onSurface.withOpacity(0.35)),
+                      size: 13, color: cs.onSurface.withValues(alpha: 0.35)),
                   const SizedBox(width: 5),
                   Text(
                     '${en ? 'Free' : '可用'} ${DeviceBridge.prettySize(_free)}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: cs.onSurface.withOpacity(0.4),
+                      color: cs.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -289,7 +289,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
           decoration: BoxDecoration(
             color: dark ? const Color(0xFF12151A) : Colors.white,
             border: Border(
-              top: BorderSide(color: cs.onSurface.withOpacity(0.07)),
+              top: BorderSide(color: cs.onSurface.withValues(alpha: 0.07)),
             ),
           ),
           child: Column(
@@ -298,7 +298,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
               Row(
                 children: <Widget>[
                   Icon(Icons.folder_outlined,
-                      size: 16, color: cs.primary.withOpacity(0.8)),
+                      size: 16, color: cs.primary.withValues(alpha: 0.8)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -356,9 +356,9 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
       padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
       decoration: BoxDecoration(
-        color: cs.primary.withOpacity(dark ? 0.14 : 0.07),
+        color: cs.primary.withValues(alpha: dark ? 0.14 : 0.07),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.primary.withOpacity(0.25)),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,7 +392,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
             style: TextStyle(
               fontSize: 11.5,
               height: 1.5,
-              color: cs.onSurface.withOpacity(0.62),
+              color: cs.onSurface.withValues(alpha: 0.62),
             ),
           ),
           const SizedBox(height: 8),
@@ -425,22 +425,22 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
             avatar: Icon(
               v.removable ? Icons.sd_card_outlined : Icons.smartphone_rounded,
               size: 15,
-              color: active ? cs.primary : cs.onSurface.withOpacity(0.55),
+              color: active ? cs.primary : cs.onSurface.withValues(alpha: 0.55),
             ),
             label: Text(
               v.label,
               style: TextStyle(
                 fontSize: 11.5,
-                color: active ? cs.primary : cs.onSurface.withOpacity(0.75),
+                color: active ? cs.primary : cs.onSurface.withValues(alpha: 0.75),
               ),
             ),
             backgroundColor: active
-                ? cs.primary.withOpacity(dark ? 0.2 : 0.1)
+                ? cs.primary.withValues(alpha: dark ? 0.2 : 0.1)
                 : Colors.transparent,
             side: BorderSide(
               color: active
-                  ? cs.primary.withOpacity(0.4)
-                  : cs.onSurface.withOpacity(0.12),
+                  ? cs.primary.withValues(alpha: 0.4)
+                  : cs.onSurface.withValues(alpha: 0.12),
             ),
             onPressed: () => _enter(v.path),
           );
@@ -468,7 +468,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
               reverse: true,
               itemCount: parts.length + 1,
               separatorBuilder: (_, __) => Icon(Icons.chevron_right_rounded,
-                  size: 14, color: cs.onSurface.withOpacity(0.3)),
+                  size: 14, color: cs.onSurface.withValues(alpha: 0.3)),
               // reverse puts index 0 at the right edge, so walk the crumbs
               // backwards to keep "root › … › current" reading left to right.
               itemBuilder: (BuildContext ctx, int i) {
@@ -495,7 +495,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
             label,
             style: TextStyle(
               fontSize: 12,
-              color: cs.onSurface.withOpacity(0.62),
+              color: cs.onSurface.withValues(alpha: 0.62),
               fontFamily: 'monospace',
             ),
           ),
@@ -522,7 +522,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Icon(Icons.folder_off_outlined,
-                  size: 34, color: cs.onSurface.withOpacity(0.2)),
+                  size: 34, color: cs.onSurface.withValues(alpha: 0.2)),
               const SizedBox(height: 10),
               Text(
                 _error ?? (en ? 'No sub-folders here' : '这里没有子文件夹'),
@@ -530,7 +530,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.6,
-                  color: cs.onSurface.withOpacity(0.45),
+                  color: cs.onSurface.withValues(alpha: 0.45),
                 ),
               ),
               if (_error != null) ...<Widget>[
@@ -559,8 +559,8 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
                 : Icons.folder_rounded,
             size: 20,
             color: name.startsWith('.')
-                ? cs.onSurface.withOpacity(0.3)
-                : cs.primary.withOpacity(0.75),
+                ? cs.onSurface.withValues(alpha: 0.3)
+                : cs.primary.withValues(alpha: 0.75),
           ),
           title: Text(
             name,
@@ -572,7 +572,7 @@ class _WorkspacePickerPageState extends State<WorkspacePickerPage>
             _hintFor(name, en),
             style: TextStyle(
               fontSize: 10.5,
-              color: cs.onSurface.withOpacity(0.35),
+              color: cs.onSurface.withValues(alpha: 0.35),
             ),
           ),
           trailing: IconButton(

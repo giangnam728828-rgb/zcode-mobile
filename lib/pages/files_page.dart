@@ -116,7 +116,7 @@ class _FilesPageState extends State<FilesPage> {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w400,
-                color: cs.onSurface.withOpacity(0.42),
+                color: cs.onSurface.withValues(alpha: 0.42),
               ),
             ),
           ],
@@ -194,7 +194,7 @@ class _FilesPageState extends State<FilesPage> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
-        color: cs.primary.withOpacity(0.07),
+        color: cs.primary.withValues(alpha: 0.07),
         child: Row(
           children: <Widget>[
             Icon(Icons.folder_special_outlined, size: 15, color: cs.primary),
@@ -208,12 +208,12 @@ class _FilesPageState extends State<FilesPage> {
                 style: TextStyle(
                   fontSize: 11,
                   height: 1.4,
-                  color: cs.primary.withOpacity(0.9),
+                  color: cs.primary.withValues(alpha: 0.9),
                 ),
               ),
             ),
             Icon(Icons.chevron_right_rounded,
-                size: 16, color: cs.primary.withOpacity(0.6)),
+                size: 16, color: cs.primary.withValues(alpha: 0.6)),
           ],
         ),
       ),
@@ -227,7 +227,7 @@ class _FilesPageState extends State<FilesPage> {
       height: 38,
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: cs.onSurface.withOpacity(0.06)),
+          bottom: BorderSide(color: cs.onSurface.withValues(alpha: 0.06)),
         ),
       ),
       child: ListView(
@@ -246,7 +246,7 @@ class _FilesPageState extends State<FilesPage> {
           ),
           for (int i = 0; i < parts.length; i++) ...<Widget>[
             Icon(Icons.chevron_right_rounded,
-                size: 15, color: cs.onSurface.withOpacity(0.25)),
+                size: 15, color: cs.onSurface.withValues(alpha: 0.25)),
             _crumb(
               label: parts[i],
               active: i == parts.length - 1,
@@ -264,7 +264,7 @@ class _FilesPageState extends State<FilesPage> {
               iconSize: 16,
               tooltip: en ? 'Up' : '上一级',
               icon: Icon(Icons.arrow_upward_rounded,
-                  color: cs.onSurface.withOpacity(0.45)),
+                  color: cs.onSurface.withValues(alpha: 0.45)),
               onPressed: () {
                 setState(() {
                   _path = parts.sublist(0, parts.length - 1).join('/');
@@ -293,7 +293,7 @@ class _FilesPageState extends State<FilesPage> {
         child: Row(
           children: <Widget>[
             if (icon != null) ...<Widget>[
-              Icon(icon, size: 14, color: cs.onSurface.withOpacity(0.45)),
+              Icon(icon, size: 14, color: cs.onSurface.withValues(alpha: 0.45)),
               const SizedBox(width: 4),
             ],
             Text(
@@ -303,8 +303,8 @@ class _FilesPageState extends State<FilesPage> {
                 fontFamily: icon == null ? 'monospace' : null,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w400,
                 color: active
-                    ? cs.onSurface.withOpacity(0.8)
-                    : cs.onSurface.withOpacity(0.45),
+                    ? cs.onSurface.withValues(alpha: 0.8)
+                    : cs.onSurface.withValues(alpha: 0.45),
               ),
             ),
           ],
@@ -332,13 +332,13 @@ class _FilesPageState extends State<FilesPage> {
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Icon(Icons.folder_open_rounded,
-              size: 40, color: cs.onSurface.withOpacity(0.2)),
+              size: 40, color: cs.onSurface.withValues(alpha: 0.2)),
           const SizedBox(height: 10),
           Text(
             en ? 'This folder is empty' : '这个目录还是空的',
             style: TextStyle(
               fontSize: 13,
-              color: cs.onSurface.withOpacity(0.45),
+              color: cs.onSurface.withValues(alpha: 0.45),
             ),
           ),
           const SizedBox(height: 14),
@@ -383,7 +383,7 @@ class _FilesPageState extends State<FilesPage> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13.5,
-                      color: cs.onSurface.withOpacity(0.86),
+                      color: cs.onSurface.withValues(alpha: 0.86),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -393,7 +393,7 @@ class _FilesPageState extends State<FilesPage> {
                         : '${_size(size)}${Attachment.looksLikeImage(name) ? ' · image' : ''}',
                     style: TextStyle(
                       fontSize: 10.5,
-                      color: cs.onSurface.withOpacity(0.36),
+                      color: cs.onSurface.withValues(alpha: 0.36),
                     ),
                   ),
                 ],
@@ -403,7 +403,7 @@ class _FilesPageState extends State<FilesPage> {
               iconSize: 18,
               tooltip: '',
               icon: Icon(Icons.more_horiz_rounded,
-                  color: cs.onSurface.withOpacity(0.32)),
+                  color: cs.onSurface.withValues(alpha: 0.32)),
               onPressed: () => _itemSheet(e, rel, en),
             ),
           ],
@@ -418,7 +418,7 @@ class _FilesPageState extends State<FilesPage> {
     Color color;
     if (dir) {
       icon = Icons.folder_rounded;
-      color = cs.primary.withOpacity(0.7);
+      color = cs.primary.withValues(alpha: 0.7);
     } else if (Attachment.looksLikeImage(name)) {
       icon = Icons.image_outlined;
       color = const Color(0xFF12A67A);
@@ -436,13 +436,13 @@ class _FilesPageState extends State<FilesPage> {
       color = const Color(0xFF3D5AFE);
     } else {
       icon = Icons.insert_drive_file_outlined;
-      color = cs.onSurface.withOpacity(0.45);
+      color = cs.onSurface.withValues(alpha: 0.45);
     }
     return Container(
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(9),
       ),
       alignment: Alignment.center,
@@ -815,7 +815,7 @@ class _FileEditorPageState extends State<FileEditorPage> {
                 style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w400,
-                  color: cs.onSurface.withOpacity(0.4),
+                  color: cs.onSurface.withValues(alpha: 0.4),
                 ),
               ),
             ],
@@ -833,7 +833,7 @@ class _FileEditorPageState extends State<FileEditorPage> {
               child: Text(
                 en ? 'Save' : '保存',
                 style: TextStyle(
-                  color: _dirty ? cs.primary : cs.onSurface.withOpacity(0.3),
+                  color: _dirty ? cs.primary : cs.onSurface.withValues(alpha: 0.3),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -845,7 +845,7 @@ class _FileEditorPageState extends State<FileEditorPage> {
             if (_error != null)
               Container(
                 width: double.infinity,
-                color: cs.error.withOpacity(0.08),
+                color: cs.error.withValues(alpha: 0.08),
                 padding: const EdgeInsets.all(10),
                 child: Text(
                   _error!,

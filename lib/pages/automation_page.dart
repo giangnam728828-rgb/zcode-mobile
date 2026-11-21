@@ -153,12 +153,12 @@ class _AutomationPageState extends State<AutomationPage> {
               Text('加进列表后可以再改触发条件和动作。',
                   style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
+                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
               const SizedBox(height: 12),
               ...list.map((AutomationRule t) => Card(
                     elevation: 0,
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: Theme.of(ctx).colorScheme.surfaceVariant.withOpacity(0.35),
+                    color: Theme.of(ctx).colorScheme.surfaceVariant.withValues(alpha: 0.35),
                     child: ListTile(
                       title: Text(t.name,
                           style: const TextStyle(
@@ -253,7 +253,7 @@ class _AutomationPageState extends State<AutomationPage> {
               const SizedBox(height: 8),
               Text('会先解析成规则，再打开编辑页给你确认。',
                   style: TextStyle(
-                      fontSize: 10.5, color: cs.onSurface.withOpacity(0.45))),
+                      fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.45))),
             ],
             ),
           ),
@@ -299,12 +299,12 @@ class _AutomationPageState extends State<AutomationPage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: on
-            ? cs.tertiaryContainer.withOpacity(0.25)
-            : cs.surfaceVariant.withOpacity(0.32),
+            ? cs.tertiaryContainer.withValues(alpha: 0.25)
+            : cs.surfaceVariant.withValues(alpha: 0.32),
         border: Border.all(
           color: on
-              ? cs.tertiary.withOpacity(0.3)
-              : cs.outline.withOpacity(0.3),
+              ? cs.tertiary.withValues(alpha: 0.3)
+              : cs.outline.withValues(alpha: 0.3),
         ),
       ),
       child: Column(
@@ -314,7 +314,7 @@ class _AutomationPageState extends State<AutomationPage> {
             children: <Widget>[
               Icon(Icons.visibility_outlined,
                   size: 17,
-                  color: on ? cs.tertiary : cs.onSurface.withOpacity(0.5)),
+                  color: on ? cs.tertiary : cs.onSurface.withValues(alpha: 0.5)),
               const SizedBox(width: 7),
               Text(en ? 'Screen & notifications' : '屏幕与通知',
                   style: const TextStyle(
@@ -326,8 +326,8 @@ class _AutomationPageState extends State<AutomationPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                   color: on
-                      ? cs.tertiary.withOpacity(0.16)
-                      : cs.onSurface.withOpacity(0.06),
+                      ? cs.tertiary.withValues(alpha: 0.16)
+                      : cs.onSurface.withValues(alpha: 0.06),
                 ),
                 child: Text(
                   on ? (en ? 'connected' : '已连接') : (en ? 'off' : '未开启'),
@@ -335,7 +335,7 @@ class _AutomationPageState extends State<AutomationPage> {
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color:
-                        on ? cs.tertiary : cs.onSurface.withOpacity(0.5),
+                        on ? cs.tertiary : cs.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -361,7 +361,7 @@ class _AutomationPageState extends State<AutomationPage> {
             style: TextStyle(
                 fontSize: 11.5,
                 height: 1.45,
-                color: cs.onSurface.withOpacity(0.6)),
+                color: cs.onSurface.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: 9),
           Wrap(
@@ -450,14 +450,14 @@ class _AutomationPageState extends State<AutomationPage> {
               const SizedBox(height: 2),
               Text('${snap.nodes.length} 个可读元素',
                   style: TextStyle(
-                      fontSize: 11, color: cs.onSurface.withOpacity(0.45))),
+                      fontSize: 11, color: cs.onSurface.withValues(alpha: 0.45))),
               const SizedBox(height: 10),
               if (snap.isEmpty)
                 Text('这一屏没有可读文字。有些应用（比如银行、游戏）会主动屏蔽。',
                     style: TextStyle(
                         fontSize: 12,
                         height: 1.5,
-                        color: cs.onSurface.withOpacity(0.55)))
+                        color: cs.onSurface.withValues(alpha: 0.55)))
               else
                 ...snap.nodes.map((A11yNode n) => Container(
                       margin: const EdgeInsets.only(bottom: 6),
@@ -465,7 +465,7 @@ class _AutomationPageState extends State<AutomationPage> {
                           horizontal: 10, vertical: 8),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(9),
-                        color: cs.surfaceVariant.withOpacity(0.3),
+                        color: cs.surfaceVariant.withValues(alpha: 0.3),
                       ),
                       child: Row(
                         children: <Widget>[
@@ -517,7 +517,7 @@ class _AutomationPageState extends State<AutomationPage> {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w400,
-                color: cs.onSurface.withOpacity(0.45),
+                color: cs.onSurface.withValues(alpha: 0.45),
               ),
             ),
           ],
@@ -604,18 +604,18 @@ class _AutomationPageState extends State<AutomationPage> {
       child: Column(
         children: <Widget>[
           Icon(Icons.auto_awesome_outlined,
-              size: 34, color: cs.onSurface.withOpacity(0.2)),
+              size: 34, color: cs.onSurface.withValues(alpha: 0.2)),
           const SizedBox(height: 10),
           Text(en ? 'No rules yet' : '还没有规则',
               style: TextStyle(
-                  fontSize: 13, color: cs.onSurface.withOpacity(0.55))),
+                  fontSize: 13, color: cs.onSurface.withValues(alpha: 0.55))),
           const SizedBox(height: 4),
           Text(
             en
                 ? 'Start from a template, or create one from scratch.'
                 : '可以从模板加一条，也可以自己建。',
             style:
-                TextStyle(fontSize: 11.5, color: cs.onSurface.withOpacity(0.4)),
+                TextStyle(fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.4)),
           ),
         ],
       ),
@@ -630,10 +630,10 @@ class _AutomationPageState extends State<AutomationPage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: strong
-            ? cs.primaryContainer.withOpacity(0.35)
-            : cs.surfaceVariant.withOpacity(0.4),
+            ? cs.primaryContainer.withValues(alpha: 0.35)
+            : cs.surfaceVariant.withValues(alpha: 0.4),
         border: Border.all(
-          color: strong ? cs.primary.withOpacity(0.3) : cs.outline.withOpacity(0.35),
+          color: strong ? cs.primary.withValues(alpha: 0.3) : cs.outline.withValues(alpha: 0.35),
         ),
       ),
       child: Column(
@@ -644,7 +644,7 @@ class _AutomationPageState extends State<AutomationPage> {
               Icon(
                 strong ? Icons.shield_rounded : Icons.shield_outlined,
                 size: 17,
-                color: strong ? cs.primary : cs.onSurface.withOpacity(0.5),
+                color: strong ? cs.primary : cs.onSurface.withValues(alpha: 0.5),
               ),
               const SizedBox(width: 7),
               Text(
@@ -658,15 +658,15 @@ class _AutomationPageState extends State<AutomationPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                   color: strong
-                      ? cs.primary.withOpacity(0.16)
-                      : cs.onSurface.withOpacity(0.07),
+                      ? cs.primary.withValues(alpha: 0.16)
+                      : cs.onSurface.withValues(alpha: 0.07),
                 ),
                 child: Text(
                   st.label,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: strong ? cs.primary : cs.onSurface.withOpacity(0.55),
+                    color: strong ? cs.primary : cs.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ),
@@ -690,7 +690,7 @@ class _AutomationPageState extends State<AutomationPage> {
           Text(
             st.unlocked,
             style: TextStyle(
-                fontSize: 11.5, height: 1.45, color: cs.onSurface.withOpacity(0.6)),
+                fontSize: 11.5, height: 1.45, color: cs.onSurface.withValues(alpha: 0.6)),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -714,7 +714,7 @@ class _AutomationPageState extends State<AutomationPage> {
                   : 'root 或 Shizuku 能解锁系统开关、截屏、模拟点击和应用控制；'
                       '两者都没有时，规则依然可以发通知、跑命令、叫智能体干活。',
               style: TextStyle(
-                  fontSize: 10.5, height: 1.5, color: cs.onSurface.withOpacity(0.42)),
+                  fontSize: 10.5, height: 1.5, color: cs.onSurface.withValues(alpha: 0.42)),
             ),
           ],
         ],
@@ -728,8 +728,8 @@ class _AutomationPageState extends State<AutomationPage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: ok
-            ? cs.primary.withOpacity(0.1)
-            : cs.onSurface.withOpacity(0.04),
+            ? cs.primary.withValues(alpha: 0.1)
+            : cs.onSurface.withValues(alpha: 0.04),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -737,14 +737,14 @@ class _AutomationPageState extends State<AutomationPage> {
           Icon(
             ok ? Icons.check_rounded : Icons.remove_rounded,
             size: 12,
-            color: ok ? cs.primary : cs.onSurface.withOpacity(0.3),
+            color: ok ? cs.primary : cs.onSurface.withValues(alpha: 0.3),
           ),
           const SizedBox(width: 3),
           Text(
             label,
             style: TextStyle(
               fontSize: 10.5,
-              color: ok ? cs.primary : cs.onSurface.withOpacity(0.4),
+              color: ok ? cs.primary : cs.onSurface.withValues(alpha: 0.4),
             ),
           ),
         ],
@@ -761,7 +761,7 @@ class _AutomationPageState extends State<AutomationPage> {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
-      color: cs.surfaceVariant.withOpacity(rule.enabled ? 0.42 : 0.2),
+      color: cs.surfaceVariant.withValues(alpha: rule.enabled ? 0.42 : 0.2),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _edit(rule),
@@ -777,7 +777,7 @@ class _AutomationPageState extends State<AutomationPage> {
                   size: 18,
                   color: rule.enabled
                       ? cs.primary
-                      : cs.onSurface.withOpacity(0.3),
+                      : cs.onSurface.withValues(alpha: 0.3),
                 ),
               ),
               const SizedBox(width: 10),
@@ -792,7 +792,7 @@ class _AutomationPageState extends State<AutomationPage> {
                         fontWeight: FontWeight.w600,
                         color: rule.enabled
                             ? cs.onSurface
-                            : cs.onSurface.withOpacity(0.45),
+                            : cs.onSurface.withValues(alpha: 0.45),
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -800,7 +800,7 @@ class _AutomationPageState extends State<AutomationPage> {
                       '${rule.trigger.summary} · $lastLabel',
                       style: TextStyle(
                         fontSize: 11,
-                        color: cs.onSurface.withOpacity(0.45),
+                        color: cs.onSurface.withValues(alpha: 0.45),
                       ),
                     ),
                     if (rule.lastResult.isNotEmpty && rule.enabled) ...[
@@ -811,7 +811,7 @@ class _AutomationPageState extends State<AutomationPage> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: cs.onSurface.withOpacity(0.36),
+                          color: cs.onSurface.withValues(alpha: 0.36),
                         ),
                       ),
                     ],
@@ -896,22 +896,22 @@ class _AutomationPageState extends State<AutomationPage> {
                     height: 4,
                     decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: cs.primary.withOpacity(0.5)),
+                        color: cs.primary.withValues(alpha: 0.5)),
                   ),
                   const SizedBox(width: 8),
                   Text(r[0],
                       style: TextStyle(
                           fontSize: 11.5,
-                          color: cs.onSurface.withOpacity(0.62))),
+                          color: cs.onSurface.withValues(alpha: 0.62))),
                   Text('  →  ',
                       style: TextStyle(
                           fontSize: 11.5,
-                          color: cs.onSurface.withOpacity(0.25))),
+                          color: cs.onSurface.withValues(alpha: 0.25))),
                   Expanded(
                     child: Text(r[1],
                         style: TextStyle(
                             fontSize: 11.5,
-                            color: cs.onSurface.withOpacity(0.42))),
+                            color: cs.onSurface.withValues(alpha: 0.42))),
                   ),
                 ],
               ),
@@ -1035,7 +1035,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: cs.outline.withOpacity(0.35)),
+                border: Border.all(color: cs.outline.withValues(alpha: 0.35)),
               ),
               child: Row(
                 children: <Widget>[
@@ -1047,7 +1047,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
                         style: const TextStyle(fontSize: 13)),
                   ),
                   Icon(Icons.expand_more_rounded,
-                      size: 18, color: cs.onSurface.withOpacity(0.4)),
+                      size: 18, color: cs.onSurface.withValues(alpha: 0.4)),
                 ],
               ),
             ),
@@ -1080,14 +1080,14 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: Text('还没有动作。至少加一个，否则规则什么也不做。',
                   style: TextStyle(
-                      fontSize: 11.5, color: cs.onSurface.withOpacity(0.45))),
+                      fontSize: 11.5, color: cs.onSurface.withValues(alpha: 0.45))),
             ),
           ...List<Widget>.generate(_actions.length, (int i) {
             final AutomationAction a = _actions[i];
             return Card(
               elevation: 0,
               margin: const EdgeInsets.only(bottom: 7),
-              color: cs.surfaceVariant.withOpacity(0.35),
+              color: cs.surfaceVariant.withValues(alpha: 0.35),
               child: ListTile(
                 dense: true,
                 leading: Icon(_actionIcon(a.kind), size: 17, color: cs.primary),
@@ -1122,7 +1122,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
             title: const Text('执行后发一条通知', style: TextStyle(fontSize: 13)),
             subtitle: Text('规则里的动作失败时一定会提示。',
                 style: TextStyle(
-                    fontSize: 11, color: cs.onSurface.withOpacity(0.45))),
+                    fontSize: 11, color: cs.onSurface.withValues(alpha: 0.45))),
           ),
         ],
       ),
@@ -1201,7 +1201,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               const SizedBox(width: 10),
               Text('每周的哪几天（不选＝每天）',
                   style: TextStyle(
-                      fontSize: 11, color: cs.onSurface.withOpacity(0.45))),
+                      fontSize: 11, color: cs.onSurface.withValues(alpha: 0.45))),
             ],
           ),
           const SizedBox(height: 8),
@@ -1283,7 +1283,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
           border: const OutlineInputBorder(),
           helperText: 'Android 10 起读取完整 SSID 需要定位权限，读不到时按「任意 Wi-Fi」处理。',
           helperStyle:
-              TextStyle(fontSize: 10, color: cs.onSurface.withOpacity(0.4)),
+              TextStyle(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.4)),
         ),
         style: const TextStyle(fontSize: 13),
         onChanged: (String v) {
@@ -1339,7 +1339,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
               style: TextStyle(
                   fontSize: 10.5,
                   height: 1.4,
-                  color: cs.onSurface.withOpacity(0.45)),
+                  color: cs.onSurface.withValues(alpha: 0.45)),
             ),
           ),
         ],
@@ -1399,7 +1399,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
             alignment: Alignment.centerLeft,
             child: Text('需要无障碍服务（不用 root）。',
                 style: TextStyle(
-                    fontSize: 10.5, color: cs.onSurface.withOpacity(0.45))),
+                    fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.45))),
           ),
         ],
       ),
@@ -1420,7 +1420,7 @@ class _RuleEditorPageState extends State<_RuleEditorPage> {
           border: const OutlineInputBorder(),
           helperText: '每次切到新界面时会读一次，30 秒内不会重复触发。',
           helperStyle:
-              TextStyle(fontSize: 10, color: cs.onSurface.withOpacity(0.4)),
+              TextStyle(fontSize: 10, color: cs.onSurface.withValues(alpha: 0.4)),
         ),
         onChanged: (String v) {
           _trigger = AutomationTrigger(
@@ -1838,7 +1838,7 @@ class _ActionSheetState extends State<_ActionSheet> {
           const SizedBox(height: 8),
           Text(
             '自动化里的智能体会自动批准工具调用（没人在旁边点确认），所以提示词要写清楚边界。',
-            style: TextStyle(fontSize: 10.5, color: cs.onSurface.withOpacity(0.42)),
+            style: TextStyle(fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.42)),
           ),
         ];
       case 'shell':
@@ -1877,7 +1877,7 @@ class _ActionSheetState extends State<_ActionSheet> {
               padding: const EdgeInsets.only(top: 6),
               child: Text('选 root/Shizuku 时当前不可用，规则会报错而不是假装成功。',
                   style: TextStyle(
-                      fontSize: 10.5, color: cs.onSurface.withOpacity(0.4))),
+                      fontSize: 10.5, color: cs.onSurface.withValues(alpha: 0.4))),
             ),
         ];
       case 'notify':
@@ -1923,7 +1923,7 @@ class _ActionSheetState extends State<_ActionSheet> {
                                   size: 12,
                                   color: privileged
                                       ? cs.primary
-                                      : cs.onSurface.withOpacity(0.3)),
+                                      : cs.onSurface.withValues(alpha: 0.3)),
                             ),
                         ],
                       ),
@@ -2030,7 +2030,7 @@ class _ActionSheetState extends State<_ActionSheet> {
                 fontSize: 10.5,
                 height: 1.4,
                 color:
-                    connected ? cs.onSurface.withOpacity(0.45) : cs.error),
+                    connected ? cs.onSurface.withValues(alpha: 0.45) : cs.error),
           ),
         ];
       case 'speak':
@@ -2139,7 +2139,7 @@ class _SheetHandle extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12, top: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.18),
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.18),
         ),
       ),
     );
@@ -2186,14 +2186,14 @@ class _LogSheet extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text('还没有执行记录。',
                     style: TextStyle(
-                        fontSize: 12, color: cs.onSurface.withOpacity(0.45))),
+                        fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45))),
               ),
             ...engine.logs.map((AutomationLog l) => Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
-                    color: cs.surfaceVariant.withOpacity(0.35),
+                    color: cs.surfaceVariant.withValues(alpha: 0.35),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2217,7 +2217,7 @@ class _LogSheet extends StatelessWidget {
                           Text(_time(l.at),
                               style: TextStyle(
                                   fontSize: 10,
-                                  color: cs.onSurface.withOpacity(0.4))),
+                                  color: cs.onSurface.withValues(alpha: 0.4))),
                         ],
                       ),
                       if (l.detail.isNotEmpty) ...<Widget>[
@@ -2229,7 +2229,7 @@ class _LogSheet extends StatelessWidget {
                           style: TextStyle(
                               fontSize: 11,
                               height: 1.45,
-                              color: cs.onSurface.withOpacity(0.55)),
+                              color: cs.onSurface.withValues(alpha: 0.55)),
                         ),
                       ],
                     ],

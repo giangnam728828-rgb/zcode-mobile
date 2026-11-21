@@ -118,7 +118,7 @@ class _ModulesPageState extends State<ModulesPage> {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w400,
-                color: cs.onSurface.withOpacity(0.42),
+                color: cs.onSurface.withValues(alpha: 0.42),
               ),
             ),
           ],
@@ -157,7 +157,7 @@ class _ModulesPageState extends State<ModulesPage> {
               style: TextStyle(
                 fontSize: 12,
                 height: 1.55,
-                color: cs.onSurface.withOpacity(0.5),
+                color: cs.onSurface.withValues(alpha: 0.5),
               ),
             ),
             if (_env.isNotEmpty) ...<Widget>[
@@ -187,7 +187,7 @@ class _ModulesPageState extends State<ModulesPage> {
             Row(
               children: <Widget>[
                 Icon(Icons.folder_outlined,
-                    size: 13, color: cs.onSurface.withOpacity(0.4)),
+                    size: 13, color: cs.onSurface.withValues(alpha: 0.4)),
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
@@ -197,7 +197,7 @@ class _ModulesPageState extends State<ModulesPage> {
                     style: TextStyle(
                       fontSize: 10.5,
                       fontFamily: 'monospace',
-                      color: cs.onSurface.withOpacity(0.38),
+                      color: cs.onSurface.withValues(alpha: 0.38),
                     ),
                   ),
                 ),
@@ -205,7 +205,7 @@ class _ModulesPageState extends State<ModulesPage> {
                   '${installed.length} ${en ? 'installed' : '已安装'}',
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: cs.onSurface.withOpacity(0.38),
+                    color: cs.onSurface.withValues(alpha: 0.38),
                   ),
                 ),
               ],
@@ -239,7 +239,7 @@ class _ModulesPageState extends State<ModulesPage> {
                 hintText: 'https://example.com/tools.tar.gz',
                 hintStyle: TextStyle(
                   fontSize: 12,
-                  color: cs.onSurface.withOpacity(0.3),
+                  color: cs.onSurface.withValues(alpha: 0.3),
                 ),
               ),
             ),
@@ -252,7 +252,7 @@ class _ModulesPageState extends State<ModulesPage> {
                 hintText: en ? 'Display name (optional)' : '显示名称（可选）',
                 hintStyle: TextStyle(
                   fontSize: 12,
-                  color: cs.onSurface.withOpacity(0.3),
+                  color: cs.onSurface.withValues(alpha: 0.3),
                 ),
               ),
             ),
@@ -294,7 +294,7 @@ class _ModulesPageState extends State<ModulesPage> {
               style: TextStyle(
                 fontSize: 11,
                 height: 1.5,
-                color: cs.onSurface.withOpacity(0.38),
+                color: cs.onSurface.withValues(alpha: 0.38),
               ),
             ),
           ]),
@@ -312,7 +312,7 @@ class _ModulesPageState extends State<ModulesPage> {
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.3,
-          color: cs.onSurface.withOpacity(0.42),
+          color: cs.onSurface.withValues(alpha: 0.42),
         ),
       ),
     );
@@ -346,7 +346,7 @@ class _ModulesPageState extends State<ModulesPage> {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.10),
+                  color: cs.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
@@ -372,7 +372,7 @@ class _ModulesPageState extends State<ModulesPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: cs.onSurface.withOpacity(0.05),
+                              color: cs.onSurface.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -380,7 +380,7 @@ class _ModulesPageState extends State<ModulesPage> {
                               style: TextStyle(
                                 fontSize: 9.5,
                                 fontFamily: 'monospace',
-                                color: cs.onSurface.withOpacity(0.5),
+                                color: cs.onSurface.withValues(alpha: 0.5),
                               ),
                             ),
                           ),
@@ -396,7 +396,7 @@ class _ModulesPageState extends State<ModulesPage> {
                       child: Text(en ? 'Remove' : '移除',
                           style: TextStyle(
                               fontSize: 12,
-                              color: cs.onSurface.withOpacity(0.45))),
+                              color: cs.onSurface.withValues(alpha: 0.45))),
                     )
                   : TextButton(
                       onPressed: progress == null ? onInstall : null,
@@ -419,7 +419,7 @@ class _ModulesPageState extends State<ModulesPage> {
             style: TextStyle(
               fontSize: 11.5,
               height: 1.55,
-              color: cs.onSurface.withOpacity(0.45),
+              color: cs.onSurface.withValues(alpha: 0.45),
             ),
           ),
           if (progress != null) ...<Widget>[
@@ -429,7 +429,7 @@ class _ModulesPageState extends State<ModulesPage> {
               child: LinearProgressIndicator(
                 value: progress > 0 ? progress : null,
                 minHeight: 2.5,
-                backgroundColor: cs.onSurface.withOpacity(0.07),
+                backgroundColor: cs.onSurface.withValues(alpha: 0.07),
               ),
             ),
           ],
@@ -473,7 +473,7 @@ class _ModulesPageState extends State<ModulesPage> {
                   style: TextStyle(
                     fontSize: 10.5,
                     fontFamily: 'monospace',
-                    color: cs.onSurface.withOpacity(0.4),
+                    color: cs.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
               ],
@@ -483,7 +483,7 @@ class _ModulesPageState extends State<ModulesPage> {
             onPressed: () => state.removeModule(m.id),
             child: Text(en ? 'Remove' : '移除',
                 style: TextStyle(
-                    fontSize: 12, color: cs.onSurface.withOpacity(0.45))),
+                    fontSize: 12, color: cs.onSurface.withValues(alpha: 0.45))),
           ),
         ],
       ),

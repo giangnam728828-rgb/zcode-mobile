@@ -118,7 +118,7 @@ class _LoginPageState extends State<LoginPage> {
                     style: TextStyle(
                       fontSize: 13.5,
                       height: 1.65,
-                      color: cs.onSurface.withOpacity(0.62),
+                      color: cs.onSurface.withValues(alpha: 0.62),
                     ),
                   ),
                   const SizedBox(height: 26),
@@ -152,7 +152,7 @@ class _LoginPageState extends State<LoginPage> {
                             _status,
                             style: TextStyle(
                               fontSize: 12.5,
-                              color: cs.onSurface.withOpacity(0.6),
+                              color: cs.onSurface.withValues(alpha: 0.6),
                             ),
                           ),
                         ),
@@ -166,7 +166,7 @@ class _LoginPageState extends State<LoginPage> {
                             : '浏览器没有自动打开？复制下面的链接手动打开：',
                         style: TextStyle(
                           fontSize: 12,
-                          color: cs.onSurface.withOpacity(0.45),
+                          color: cs.onSurface.withValues(alpha: 0.45),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -195,13 +195,13 @@ class _LoginPageState extends State<LoginPage> {
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontFamily: 'monospace',
-                                    color: cs.onSurface.withOpacity(0.6),
+                                    color: cs.onSurface.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Icon(Icons.copy_rounded,
-                                  size: 15, color: cs.onSurface.withOpacity(0.4)),
+                                  size: 15, color: cs.onSurface.withValues(alpha: 0.4)),
                             ],
                           ),
                         ),
@@ -213,7 +213,7 @@ class _LoginPageState extends State<LoginPage> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD64545).withOpacity(0.09),
+                        color: const Color(0xFFD64545).withValues(alpha: 0.09),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -237,7 +237,7 @@ class _LoginPageState extends State<LoginPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Icon(Icons.terminal_rounded,
-                            size: 16, color: cs.onSurface.withOpacity(0.45)),
+                            size: 16, color: cs.onSurface.withValues(alpha: 0.45)),
                         const SizedBox(width: 9),
                         Expanded(
                           child: Text(
@@ -250,7 +250,7 @@ class _LoginPageState extends State<LoginPage> {
                             style: TextStyle(
                               fontSize: 12,
                               height: 1.55,
-                              color: cs.onSurface.withOpacity(0.5),
+                              color: cs.onSurface.withValues(alpha: 0.5),
                             ),
                           ),
                         ),
@@ -265,7 +265,7 @@ class _LoginPageState extends State<LoginPage> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 11,
-                      color: cs.onSurface.withOpacity(0.32),
+                      color: cs.onSurface.withValues(alpha: 0.32),
                     ),
                   ),
                 ],
@@ -321,7 +321,7 @@ class _ProviderButton extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: cs.primary.withOpacity(0.12),
+                    color: cs.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
@@ -353,14 +353,14 @@ class _ProviderButton extends StatelessWidget {
                         subtitle,
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: cs.onSurface.withOpacity(0.45),
+                          color: cs.onSurface.withValues(alpha: 0.45),
                         ),
                       ),
                     ],
                   ),
                 ),
                 Icon(Icons.arrow_forward_rounded,
-                    size: 18, color: cs.onSurface.withOpacity(0.35)),
+                    size: 18, color: cs.onSurface.withValues(alpha: 0.35)),
               ],
             ),
           ),

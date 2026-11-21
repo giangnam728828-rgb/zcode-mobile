@@ -252,7 +252,7 @@ class _ChatPageState extends State<ChatPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              color: cs.onSurface.withOpacity(0.05),
+              color: cs.onSurface.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Text(
@@ -261,7 +261,7 @@ class _ChatPageState extends State<ChatPage> {
                   : '加载更早的消息',
               style: TextStyle(
                 fontSize: 11.5,
-                color: cs.onSurface.withOpacity(0.55),
+                color: cs.onSurface.withValues(alpha: 0.55),
               ),
             ),
           ),
@@ -281,9 +281,9 @@ class _ChatPageState extends State<ChatPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           decoration: BoxDecoration(
-            color: cs.primary.withOpacity(0.05),
+            color: cs.primary.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: cs.primary.withOpacity(0.12)),
+            border: Border.all(color: cs.primary.withValues(alpha: 0.12)),
           ),
           child: Row(
             children: <Widget>[
@@ -296,12 +296,12 @@ class _ChatPageState extends State<ChatPage> {
                       : '早期 ${convo.compactedCount} 条消息已压缩为摘要',
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: cs.onSurface.withOpacity(0.55),
+                    color: cs.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ),
               Icon(Icons.chevron_right_rounded,
-                  size: 16, color: cs.onSurface.withOpacity(0.3)),
+                  size: 16, color: cs.onSurface.withValues(alpha: 0.3)),
             ],
           ),
         ),
@@ -568,7 +568,7 @@ class _ChatPageState extends State<ChatPage> {
                             en ? c.en : c.zh,
                             style: TextStyle(
                               fontSize: 12.5,
-                              color: cs.onSurface.withOpacity(0.7),
+                              color: cs.onSurface.withValues(alpha: 0.7),
                             ),
                           ),
                         ),
@@ -583,7 +583,7 @@ class _ChatPageState extends State<ChatPage> {
                   style: TextStyle(
                     fontSize: 11.5,
                     height: 1.5,
-                    color: cs.onSurface.withOpacity(0.4),
+                    color: cs.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
               ],
@@ -728,7 +728,7 @@ class _ChatPageState extends State<ChatPage> {
                               color: Theme.of(ctx)
                                   .colorScheme
                                   .onSurface
-                                  .withOpacity(0.4),
+                                  .withValues(alpha: 0.4),
                             ),
                           ),
                         )
@@ -799,7 +799,7 @@ class _ChatPageState extends State<ChatPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Theme.of(ctx).colorScheme.primary.withOpacity(0.12),
+                    color: Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Text(
@@ -820,7 +820,7 @@ class _ChatPageState extends State<ChatPage> {
                     style: TextStyle(
                       fontSize: 11.5,
                       height: 1.4,
-                      color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
+                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -897,7 +897,7 @@ class _ChatPageState extends State<ChatPage> {
         color: dark ? const Color(0xFF0C0E12) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: cs.onSurface.withOpacity(0.07),
+            color: cs.onSurface.withValues(alpha: 0.07),
           ),
         ),
       ),
@@ -936,7 +936,7 @@ class _ChatPageState extends State<ChatPage> {
                           _contextLabel(state.contextChars),
                           style: TextStyle(
                             fontSize: 10,
-                            color: cs.onSurface.withOpacity(0.3),
+                            color: cs.onSurface.withValues(alpha: 0.3),
                           ),
                         ),
                       ],
@@ -987,12 +987,12 @@ class _ChatPageState extends State<ChatPage> {
               cfg.model,
               style: TextStyle(
                 fontSize: 11,
-                color: cs.onSurface.withOpacity(0.5),
+                color: cs.onSurface.withValues(alpha: 0.5),
                 letterSpacing: 0.1,
               ),
             ),
             Icon(Icons.expand_more_rounded,
-                size: 13, color: cs.onSurface.withOpacity(0.4)),
+                size: 13, color: cs.onSurface.withValues(alpha: 0.4)),
           ],
         ),
       ),
@@ -1073,7 +1073,7 @@ class _ChatPageState extends State<ChatPage> {
   }) {
     final ColorScheme cs = Theme.of(context).colorScheme;
     final Color tint =
-        enabled ? cs.onSurface : cs.onSurface.withOpacity(0.32);
+        enabled ? cs.onSurface : cs.onSurface.withValues(alpha: 0.32);
     return PopupMenuItem<String>(
       value: value,
       enabled: enabled,
@@ -1257,7 +1257,7 @@ class _EmptyState extends StatelessWidget {
                   gradient: LinearGradient(
                     colors: <Color>[
                       cs.primary,
-                      cs.primary.withOpacity(0.65),
+                      cs.primary.withValues(alpha: 0.65),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -1265,7 +1265,7 @@ class _EmptyState extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
-                      color: cs.primary.withOpacity(dark ? 0.30 : 0.22),
+                      color: cs.primary.withValues(alpha: dark ? 0.30 : 0.22),
                       blurRadius: 22,
                       offset: const Offset(0, 8),
                     ),
@@ -1293,7 +1293,7 @@ class _EmptyState extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.55,
-                  color: cs.onSurface.withOpacity(0.5),
+                  color: cs.onSurface.withValues(alpha: 0.5),
                 ),
               ),
               const SizedBox(height: 16),
@@ -1338,7 +1338,7 @@ class _EmptyState extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10.5,
                   height: 1.5,
-                  color: cs.onSurface.withOpacity(0.3),
+                  color: cs.onSurface.withValues(alpha: 0.3),
                 ),
               ),
             ],
@@ -1363,18 +1363,18 @@ class _EmptyState extends StatelessWidget {
         decoration: BoxDecoration(
           color: dark ? const Color(0xFF14181F) : Colors.white,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: cs.onSurface.withOpacity(0.08)),
+          border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(icon, size: 14, color: cs.primary.withOpacity(0.85)),
+            Icon(icon, size: 14, color: cs.primary.withValues(alpha: 0.85)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 11.5,
-                color: cs.onSurface.withOpacity(0.7),
+                color: cs.onSurface.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -1404,7 +1404,7 @@ class _PromptCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: cs.onSurface.withOpacity(0.08)),
+            border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: <Widget>[
@@ -1413,12 +1413,12 @@ class _PromptCard extends StatelessWidget {
                   label,
                   style: TextStyle(
                     fontSize: 13,
-                    color: cs.onSurface.withOpacity(0.82),
+                    color: cs.onSurface.withValues(alpha: 0.82),
                   ),
                 ),
               ),
               Icon(Icons.north_east_rounded,
-                  size: 14, color: cs.onSurface.withOpacity(0.28)),
+                  size: 14, color: cs.onSurface.withValues(alpha: 0.28)),
             ],
           ),
         ),

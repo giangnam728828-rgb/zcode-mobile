@@ -44,7 +44,7 @@ class _ToolCardState extends State<ToolCard> {
         icon = Icons.error_outline_rounded;
         break;
       case ToolStatus.denied:
-        tint = cs.onSurface.withOpacity(0.45);
+        tint = cs.onSurface.withValues(alpha: 0.45);
         icon = Icons.block_rounded;
         break;
       default:
@@ -81,7 +81,7 @@ class _ToolCardState extends State<ToolCard> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: tint.withOpacity(0.12),
+                      color: tint.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text(
@@ -106,7 +106,7 @@ class _ToolCardState extends State<ToolCard> {
                           style: TextStyle(
                             fontSize: 12,
                             fontFamily: 'monospace',
-                            color: cs.onSurface.withOpacity(0.8),
+                            color: cs.onSurface.withValues(alpha: 0.8),
                           ),
                         ),
                         if (detail.isNotEmpty && !_open)
@@ -119,7 +119,7 @@ class _ToolCardState extends State<ToolCard> {
                               style: TextStyle(
                                 fontSize: 10.5,
                                 height: 1.3,
-                                color: cs.onSurface.withOpacity(0.38),
+                                color: cs.onSurface.withValues(alpha: 0.38),
                               ),
                             ),
                           ),
@@ -133,7 +133,7 @@ class _ToolCardState extends State<ToolCard> {
                         _duration(c.duration!),
                         style: TextStyle(
                           fontSize: 10,
-                          color: cs.onSurface.withOpacity(0.3),
+                          color: cs.onSurface.withValues(alpha: 0.3),
                         ),
                       ),
                     ),
@@ -143,7 +143,7 @@ class _ToolCardState extends State<ToolCard> {
                           ? Icons.keyboard_arrow_up_rounded
                           : Icons.keyboard_arrow_down_rounded,
                       size: 18,
-                      color: cs.onSurface.withOpacity(0.35),
+                      color: cs.onSurface.withValues(alpha: 0.35),
                     ),
                 ],
               ),
@@ -263,7 +263,7 @@ class _PlanCard extends StatelessWidget {
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.2,
-                  color: cs.onSurface.withOpacity(0.7),
+                  color: cs.onSurface.withValues(alpha: 0.7),
                 ),
               ),
               const Spacer(),
@@ -271,7 +271,7 @@ class _PlanCard extends StatelessWidget {
                 '$done/${items.length}',
                 style: TextStyle(
                   fontSize: 10.5,
-                  color: cs.onSurface.withOpacity(0.38),
+                  color: cs.onSurface.withValues(alpha: 0.38),
                 ),
               ),
             ],
@@ -282,7 +282,7 @@ class _PlanCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: ratio,
               minHeight: 3,
-              backgroundColor: cs.onSurface.withOpacity(0.07),
+              backgroundColor: cs.onSurface.withValues(alpha: 0.07),
               valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
             ),
           ),
@@ -306,7 +306,7 @@ class _PlanCard extends StatelessWidget {
                           ? const Color(0xFF12A67A)
                           : (t.active
                               ? cs.primary
-                              : cs.onSurface.withOpacity(0.28)),
+                              : cs.onSurface.withValues(alpha: 0.28)),
                     ),
                   ),
                   const SizedBox(width: 7),
@@ -317,11 +317,11 @@ class _PlanCard extends StatelessWidget {
                         fontSize: 12.5,
                         height: 1.45,
                         color: t.done
-                            ? cs.onSurface.withOpacity(0.42)
-                            : cs.onSurface.withOpacity(0.82),
+                            ? cs.onSurface.withValues(alpha: 0.42)
+                            : cs.onSurface.withValues(alpha: 0.82),
                         decoration:
                             t.done ? TextDecoration.lineThrough : null,
-                        decorationColor: cs.onSurface.withOpacity(0.3),
+                        decorationColor: cs.onSurface.withValues(alpha: 0.3),
                       ),
                     ),
                   ),

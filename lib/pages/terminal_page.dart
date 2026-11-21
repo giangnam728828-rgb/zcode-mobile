@@ -251,7 +251,7 @@ class _TerminalPageState extends State<TerminalPage> {
                 fontSize: 10,
                 fontWeight: FontWeight.w400,
                 fontFamily: 'monospace',
-                color: cs.onSurface.withOpacity(0.4),
+                color: cs.onSurface.withValues(alpha: 0.4),
               ),
             ),
           ],
@@ -325,14 +325,14 @@ class _TerminalPageState extends State<TerminalPage> {
               decoration: BoxDecoration(
                 color: dark ? const Color(0xFF101318) : Colors.white,
                 border: Border(
-                  top: BorderSide(color: cs.onSurface.withOpacity(0.08)),
+                  top: BorderSide(color: cs.onSurface.withValues(alpha: 0.08)),
                 ),
               ),
               padding: const EdgeInsets.fromLTRB(6, 6, 8, 8),
               child: Row(
                 children: <Widget>[
                   Icon(Icons.chevron_right_rounded,
-                      size: 18, color: cs.primary.withOpacity(0.7)),
+                      size: 18, color: cs.primary.withValues(alpha: 0.7)),
                   Expanded(
                     child: TextField(
                       controller: _input,
@@ -357,7 +357,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         hintStyle: TextStyle(
                           fontSize: 13,
                           fontFamily: 'monospace',
-                          color: cs.onSurface.withOpacity(0.3),
+                          color: cs.onSurface.withValues(alpha: 0.3),
                         ),
                       ),
                     ),
@@ -367,7 +367,7 @@ class _TerminalPageState extends State<TerminalPage> {
                     iconSize: 17,
                     tooltip: en ? 'Previous' : '上一条',
                     icon: Icon(Icons.keyboard_arrow_up_rounded,
-                        color: cs.onSurface.withOpacity(0.4)),
+                        color: cs.onSurface.withValues(alpha: 0.4)),
                     onPressed: () => _historyMove(-1),
                   ),
                   IconButton(
@@ -375,7 +375,7 @@ class _TerminalPageState extends State<TerminalPage> {
                     iconSize: 17,
                     tooltip: en ? 'Next' : '下一条',
                     icon: Icon(Icons.keyboard_arrow_down_rounded,
-                        color: cs.onSurface.withOpacity(0.4)),
+                        color: cs.onSurface.withValues(alpha: 0.4)),
                     onPressed: () => _historyMove(1),
                   ),
                   SizedBox(
@@ -383,7 +383,7 @@ class _TerminalPageState extends State<TerminalPage> {
                     height: 38,
                     child: Material(
                       color: _busy
-                          ? cs.onSurface.withOpacity(0.08)
+                          ? cs.onSurface.withValues(alpha: 0.08)
                           : cs.primary,
                       borderRadius: BorderRadius.circular(19),
                       child: InkWell(
@@ -395,7 +395,7 @@ class _TerminalPageState extends State<TerminalPage> {
                               : Icons.arrow_upward_rounded,
                           size: 18,
                           color: _busy
-                              ? cs.onSurface.withOpacity(0.35)
+                              ? cs.onSurface.withValues(alpha: 0.35)
                               : cs.onPrimary,
                         ),
                       ),
@@ -418,14 +418,14 @@ class _TerminalPageState extends State<TerminalPage> {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(Icons.terminal_rounded,
-                size: 38, color: cs.onSurface.withOpacity(0.2)),
+                size: 38, color: cs.onSurface.withValues(alpha: 0.2)),
             const SizedBox(height: 12),
             Text(
               en ? 'A shell on your phone' : '手机上的一只 shell',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: cs.onSurface.withOpacity(0.65),
+                color: cs.onSurface.withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 6),
@@ -440,7 +440,7 @@ class _TerminalPageState extends State<TerminalPage> {
               style: TextStyle(
                 fontSize: 12,
                 height: 1.55,
-                color: cs.onSurface.withOpacity(0.4),
+                color: cs.onSurface.withValues(alpha: 0.4),
               ),
             ),
           ],
@@ -467,7 +467,7 @@ class _TerminalPageState extends State<TerminalPage> {
                   fontSize: 12.5,
                   height: 1.5,
                   fontFamily: 'monospace',
-                  color: cs.primary.withOpacity(0.9),
+                  color: cs.primary.withValues(alpha: 0.9),
                 ),
               ),
               Expanded(
@@ -478,7 +478,7 @@ class _TerminalPageState extends State<TerminalPage> {
                     height: 1.5,
                     fontFamily: 'monospace',
                     fontWeight: FontWeight.w600,
-                    color: cs.onSurface.withOpacity(0.88),
+                    color: cs.onSurface.withValues(alpha: 0.88),
                   ),
                 ),
               ),
@@ -493,8 +493,8 @@ class _TerminalPageState extends State<TerminalPage> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: failed
-                    ? cs.error.withOpacity(0.28)
-                    : cs.onSurface.withOpacity(0.06),
+                    ? cs.error.withValues(alpha: 0.28)
+                    : cs.onSurface.withValues(alpha: 0.06),
               ),
             ),
             child: e.running
@@ -515,7 +515,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         style: TextStyle(
                           fontSize: 11,
                           fontFamily: 'monospace',
-                          color: cs.onSurface.withOpacity(0.4),
+                          color: cs.onSurface.withValues(alpha: 0.4),
                         ),
                       ),
                     ],
@@ -543,7 +543,7 @@ class _TerminalPageState extends State<TerminalPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
-      color: cs.primary.withOpacity(0.07),
+      color: cs.primary.withValues(alpha: 0.07),
       child: Row(
         children: <Widget>[
           Icon(_mode == 'termux' ? Icons.bolt_rounded : Icons.shield_rounded,
@@ -560,7 +560,7 @@ class _TerminalPageState extends State<TerminalPage> {
                       : '特权 shell · pm、svc、input、settings 在这里都能用'),
               style: TextStyle(
                 fontSize: 10.5,
-                color: cs.primary.withOpacity(0.85),
+                color: cs.primary.withValues(alpha: 0.85),
               ),
             ),
           ),
@@ -590,14 +590,14 @@ class _TerminalPageState extends State<TerminalPage> {
                     ? const Color(0xFF171B21)
                     : const Color(0xFFF2F4F8),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: cs.onSurface.withOpacity(0.07)),
+                border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
               ),
               child: Text(
                 quick[i],
                 style: TextStyle(
                   fontSize: 11,
                   fontFamily: 'monospace',
-                  color: cs.onSurface.withOpacity(0.55),
+                  color: cs.onSurface.withValues(alpha: 0.55),
                 ),
               ),
             ),

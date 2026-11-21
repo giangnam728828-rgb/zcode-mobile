@@ -49,10 +49,10 @@ class MarkdownText extends StatelessWidget {
         listBullet: theme.textTheme.bodyMedium
             ?.copyWith(fontSize: base, height: 1.6),
         blockquoteDecoration: BoxDecoration(
-          color: cs.primary.withOpacity(dark ? 0.10 : 0.05),
+          color: cs.primary.withValues(alpha: dark ? 0.10 : 0.05),
           borderRadius: BorderRadius.circular(4),
           border: Border(
-            left: BorderSide(color: cs.primary.withOpacity(0.55), width: 3),
+            left: BorderSide(color: cs.primary.withValues(alpha: 0.55), width: 3),
           ),
         ),
         blockquotePadding:
@@ -60,12 +60,12 @@ class MarkdownText extends StatelessWidget {
         blockquote: theme.textTheme.bodyMedium?.copyWith(
           fontSize: base - 0.5,
           height: 1.6,
-          color: cs.onSurface.withOpacity(0.78),
+          color: cs.onSurface.withValues(alpha: 0.78),
         ),
         code: TextStyle(
           fontFamily: 'monospace',
           fontSize: base - 1.5,
-          backgroundColor: cs.primary.withOpacity(dark ? 0.16 : 0.08),
+          backgroundColor: cs.primary.withValues(alpha: dark ? 0.16 : 0.08),
           color: cs.onSurface,
         ),
         codeblockPadding: EdgeInsets.zero,
@@ -73,13 +73,13 @@ class MarkdownText extends StatelessWidget {
         horizontalRuleDecoration: BoxDecoration(
           border: Border(
             top: BorderSide(
-              color: cs.onSurface.withOpacity(0.12),
+              color: cs.onSurface.withValues(alpha: 0.12),
               width: 1,
             ),
           ),
         ),
         tableBorder: TableBorder.all(
-          color: cs.onSurface.withOpacity(0.14),
+          color: cs.onSurface.withValues(alpha: 0.14),
           width: 0.8,
         ),
         tableCellsPadding:
@@ -90,7 +90,7 @@ class MarkdownText extends StatelessWidget {
         a: TextStyle(
           color: cs.primary,
           decoration: TextDecoration.underline,
-          decorationColor: cs.primary.withOpacity(0.4),
+          decorationColor: cs.primary.withValues(alpha: 0.4),
         ),
       ),
       builders: <String, MarkdownElementBuilder>{
@@ -159,7 +159,7 @@ class _CodeCard extends StatelessWidget {
             child: Row(
               children: <Widget>[
                 Icon(Icons.terminal_rounded,
-                    size: 14, color: cs.onSurface.withOpacity(0.5)),
+                    size: 14, color: cs.onSurface.withValues(alpha: 0.5)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -167,7 +167,7 @@ class _CodeCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11.5,
                       letterSpacing: 0.3,
-                      color: cs.onSurface.withOpacity(0.55),
+                      color: cs.onSurface.withValues(alpha: 0.55),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -179,7 +179,7 @@ class _CodeCard extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   constraints: const BoxConstraints(),
                   icon: Icon(Icons.copy_rounded,
-                      size: 15, color: cs.onSurface.withOpacity(0.6)),
+                      size: 15, color: cs.onSurface.withValues(alpha: 0.6)),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: code));
                     ScaffoldMessenger.of(context)

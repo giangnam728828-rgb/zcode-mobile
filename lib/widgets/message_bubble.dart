@@ -62,8 +62,8 @@ class MessageBubble extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
                 decoration: BoxDecoration(
                   color: dark
-                      ? cs.primary.withOpacity(0.20)
-                      : cs.primary.withOpacity(0.10),
+                      ? cs.primary.withValues(alpha: 0.20)
+                      : cs.primary.withValues(alpha: 0.10),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(18),
                     topRight: Radius.circular(18),
@@ -71,7 +71,7 @@ class MessageBubble extends StatelessWidget {
                     bottomRight: Radius.circular(5),
                   ),
                   border: Border.all(
-                    color: cs.primary.withOpacity(dark ? 0.28 : 0.16),
+                    color: cs.primary.withValues(alpha: dark ? 0.28 : 0.16),
                   ),
                 ),
                 child: Column(
@@ -116,13 +116,13 @@ class MessageBubble extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
-                  color: cs.onSurface.withOpacity(0.62),
+                  color: cs.onSurface.withValues(alpha: 0.62),
                   letterSpacing: 0.2,
                 ),
               ),
               if (message.stopped) ...<Widget>[
                 const SizedBox(width: 8),
-                _Tag(label: s.stopped, color: cs.onSurface.withOpacity(0.5)),
+                _Tag(label: s.stopped, color: cs.onSurface.withValues(alpha: 0.5)),
               ],
             ],
           ),
@@ -146,9 +146,9 @@ class MessageBubble extends StatelessWidget {
               margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: cs.error.withOpacity(dark ? 0.14 : 0.07),
+                color: cs.error.withValues(alpha: dark ? 0.14 : 0.07),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.error.withOpacity(0.28)),
+                border: Border.all(color: cs.error.withValues(alpha: 0.28)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,7 +193,7 @@ class MessageBubble extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10.5,
                   letterSpacing: 0.2,
-                  color: cs.onSurface.withOpacity(0.3),
+                  color: cs.onSurface.withValues(alpha: 0.3),
                 ),
               ),
             ),
@@ -204,7 +204,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _actions(BuildContext context, ColorScheme cs, bool dark) {
-    final Color tint = cs.onSurface.withOpacity(0.52);
+    final Color tint = cs.onSurface.withValues(alpha: 0.52);
     return Padding(
       padding: const EdgeInsets.only(left: 0, top: 6),
       child: Row(
@@ -337,7 +337,7 @@ class _Tag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
@@ -364,7 +364,7 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
   @override
   Widget build(BuildContext context) {
     final ColorScheme cs = Theme.of(context).colorScheme;
-    final Color tint = cs.onSurface.withOpacity(0.5);
+    final Color tint = cs.onSurface.withValues(alpha: 0.5);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Column(
@@ -403,7 +403,7 @@ class _ThinkingBlockState extends State<_ThinkingBlock> {
               padding: const EdgeInsets.only(left: 10),
               decoration: BoxDecoration(
                 border: Border(
-                  left: BorderSide(color: cs.onSurface.withOpacity(0.15)),
+                  left: BorderSide(color: cs.onSurface.withValues(alpha: 0.15)),
                 ),
               ),
               child: Text(
@@ -523,7 +523,7 @@ class _DotPulseState extends State<_DotPulse>
                   width: 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: widget.color.withOpacity(0.35 + 0.5 * scale),
+                    color: widget.color.withValues(alpha: 0.35 + 0.5 * scale),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -619,9 +619,9 @@ class _Attachments extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: cs.onSurface.withOpacity(0.06),
+        color: cs.onSurface.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.onSurface.withOpacity(0.09)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.09)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -629,7 +629,7 @@ class _Attachments extends StatelessWidget {
           Icon(
             a.isImage ? Icons.image_outlined : Icons.description_outlined,
             size: 13,
-            color: cs.onSurface.withOpacity(0.55),
+            color: cs.onSurface.withValues(alpha: 0.55),
           ),
           const SizedBox(width: 5),
           ConstrainedBox(
@@ -640,7 +640,7 @@ class _Attachments extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11.5,
-                color: cs.onSurface.withOpacity(0.65),
+                color: cs.onSurface.withValues(alpha: 0.65),
               ),
             ),
           ),

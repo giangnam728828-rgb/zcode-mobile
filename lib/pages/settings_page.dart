@@ -183,7 +183,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Container(
               padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
               decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.06),
+                color: cs.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -211,7 +211,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           _sessionLine(state),
                           style: TextStyle(
                             fontSize: 11,
-                            color: cs.onSurface.withOpacity(0.45),
+                            color: cs.onSurface.withValues(alpha: 0.45),
                           ),
                         ),
                       ],
@@ -303,7 +303,7 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(
                 fontSize: 11,
                 height: 1.5,
-                color: cs.onSurface.withOpacity(0.38),
+                color: cs.onSurface.withValues(alpha: 0.38),
               ),
             ),
             const _Gap(),
@@ -324,7 +324,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           : (s.isEnglish ? 'balanced' : '均衡'),
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: cs.onSurface.withOpacity(0.35),
+                    color: cs.onSurface.withValues(alpha: 0.35),
                   ),
                 ),
               ],
@@ -484,7 +484,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(
                       fontSize: 10.5,
                       fontFamily: 'monospace',
-                      color: cs.onSurface.withOpacity(0.38),
+                      color: cs.onSurface.withValues(alpha: 0.38),
                     ),
                   ),
                 ),
@@ -497,7 +497,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       : (s.isEnglish ? 'sandbox' : '沙箱'),
                   style: TextStyle(
                     fontSize: 10,
-                    color: cs.onSurface.withOpacity(0.3),
+                    color: cs.onSurface.withValues(alpha: 0.3),
                   ),
                 ),
               ],
@@ -533,7 +533,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: c.accentId == a.id
-                                ? cs.onSurface.withOpacity(0.75)
+                                ? cs.onSurface.withValues(alpha: 0.75)
                                 : Colors.transparent,
                             width: 2.2,
                           ),
@@ -612,7 +612,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   'v$kAppVersion',
                   style: TextStyle(
                     fontSize: 12,
-                    color: cs.onSurface.withOpacity(0.4),
+                    color: cs.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
               ],
@@ -623,7 +623,7 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(
                 fontSize: 12,
                 height: 1.55,
-                color: cs.onSurface.withOpacity(0.45),
+                color: cs.onSurface.withValues(alpha: 0.45),
               ),
             ),
           ]),
@@ -676,7 +676,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Row(
           children: <Widget>[
-            Icon(icon, size: 18, color: cs.primary.withOpacity(0.8)),
+            Icon(icon, size: 18, color: cs.primary.withValues(alpha: 0.8)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -689,14 +689,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(
                       fontSize: 11,
                       height: 1.45,
-                      color: cs.onSurface.withOpacity(0.4),
+                      color: cs.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
               ),
             ),
             Icon(Icons.chevron_right_rounded,
-                size: 17, color: cs.onSurface.withOpacity(0.3)),
+                size: 17, color: cs.onSurface.withValues(alpha: 0.3)),
           ],
         ),
       ),
@@ -716,7 +716,7 @@ class _SettingsPageState extends State<SettingsPage> {
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: 18, color: cs.primary.withOpacity(0.8)),
+          child: Icon(icon, size: 18, color: cs.primary.withValues(alpha: 0.8)),
         ),
         const SizedBox(width: 11),
         Expanded(
@@ -730,7 +730,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 style: TextStyle(
                   fontSize: 11,
                   height: 1.45,
-                  color: cs.onSurface.withOpacity(0.4),
+                  color: cs.onSurface.withValues(alpha: 0.4),
                 ),
               ),
             ],
@@ -754,7 +754,7 @@ class _SettingsPageState extends State<SettingsPage> {
           fontSize: 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.3,
-          color: cs.onSurface.withOpacity(0.42),
+          color: cs.onSurface.withValues(alpha: 0.42),
         ),
       ),
     );
@@ -784,7 +784,7 @@ class _SettingsPageState extends State<SettingsPage> {
         text,
         style: TextStyle(
           fontSize: 12,
-          color: cs.onSurface.withOpacity(0.55),
+          color: cs.onSurface.withValues(alpha: 0.55),
         ),
       ),
     );
@@ -840,12 +840,12 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? cs.primary.withOpacity(0.12) : null,
+          color: active ? cs.primary.withValues(alpha: 0.12) : null,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: active
-                ? cs.primary.withOpacity(0.4)
-                : cs.onSurface.withOpacity(0.14),
+                ? cs.primary.withValues(alpha: 0.4)
+                : cs.onSurface.withValues(alpha: 0.14),
           ),
         ),
         child: Text(
@@ -854,7 +854,7 @@ class _SettingsPageState extends State<SettingsPage> {
             fontSize: 12,
             fontWeight: active ? FontWeight.w600 : FontWeight.w400,
             color:
-                active ? cs.primary : cs.onSurface.withOpacity(0.65),
+                active ? cs.primary : cs.onSurface.withValues(alpha: 0.65),
           ),
         ),
       ),
@@ -871,7 +871,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: cs.onSurface.withOpacity(0.05),
+        color: cs.onSurface.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(11),
       ),
       child: Row(
@@ -893,7 +893,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     boxShadow: selected == values[i]
                         ? <BoxShadow>[
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
+                              color: Colors.black.withValues(alpha: 0.06),
                               blurRadius: 4,
                               offset: const Offset(0, 1),
                             ),
@@ -910,7 +910,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           : FontWeight.w400,
                       color: selected == values[i]
                           ? cs.onSurface
-                          : cs.onSurface.withOpacity(0.55),
+                          : cs.onSurface.withValues(alpha: 0.55),
                     ),
                   ),
                 ),
@@ -940,7 +940,7 @@ class _SettingsPageState extends State<SettingsPage> {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.only(top: 1),
-              child: Icon(icon, size: 18, color: color.withOpacity(0.7)),
+              child: Icon(icon, size: 18, color: color.withValues(alpha: 0.7)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -960,7 +960,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: TextStyle(
                       fontSize: 11.5,
                       height: 1.45,
-                      color: cs.onSurface.withOpacity(0.4),
+                      color: cs.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -992,7 +992,7 @@ class _SettingsPageState extends State<SettingsPage> {
               constraints: const BoxConstraints(maxHeight: 150),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.05),
+                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: SingleChildScrollView(

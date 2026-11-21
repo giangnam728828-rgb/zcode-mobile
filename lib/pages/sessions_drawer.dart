@@ -97,7 +97,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                       gradient: LinearGradient(
                         colors: <Color>[
                           cs.primary,
-                          cs.primary.withOpacity(0.72),
+                          cs.primary.withValues(alpha: 0.72),
                         ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -126,7 +126,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                           '${state.conversations.length} ${s.sessionsCount}',
                           style: TextStyle(
                             fontSize: 11,
-                            color: cs.onSurface.withOpacity(0.45),
+                            color: cs.onSurface.withValues(alpha: 0.45),
                           ),
                         ),
                       ],
@@ -155,7 +155,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                     hintText: s.searchHint,
                     isDense: true,
                     prefixIcon: Icon(Icons.search_rounded,
-                        size: 17, color: cs.onSurface.withOpacity(0.4)),
+                        size: 17, color: cs.onSurface.withValues(alpha: 0.4)),
                     prefixIconConstraints:
                         const BoxConstraints(minWidth: 34, minHeight: 30),
                     contentPadding:
@@ -166,13 +166,13 @@ class _SessionsPanelState extends State<SessionsPanel> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: cs.onSurface.withOpacity(0.10),
+                        color: cs.onSurface.withValues(alpha: 0.10),
                       ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide(
-                        color: cs.onSurface.withOpacity(0.10),
+                        color: cs.onSurface.withValues(alpha: 0.10),
                       ),
                     ),
                     suffixIcon: _query.isEmpty
@@ -184,7 +184,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                             },
                             child: Icon(Icons.close_rounded,
                                 size: 15,
-                                color: cs.onSurface.withOpacity(0.4)),
+                                color: cs.onSurface.withValues(alpha: 0.4)),
                           ),
                   ),
                 ),
@@ -197,7 +197,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                         s.noResults,
                         style: TextStyle(
                           fontSize: 13,
-                          color: cs.onSurface.withOpacity(0.38),
+                          color: cs.onSurface.withValues(alpha: 0.38),
                         ),
                       ),
                     )
@@ -249,7 +249,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                   ? Icons.unarchive_outlined
                   : Icons.archive_outlined,
               size: 15,
-              color: cs.onSurface.withOpacity(0.45),
+              color: cs.onSurface.withValues(alpha: 0.45),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -257,12 +257,12 @@ class _SessionsPanelState extends State<SessionsPanel> {
                 _showArchived ? s.hideArchived : '${s.archived} · $count',
                 style: TextStyle(
                   fontSize: 12.5,
-                  color: cs.onSurface.withOpacity(0.5),
+                  color: cs.onSurface.withValues(alpha: 0.5),
                 ),
               ),
             ),
             Icon(Icons.chevron_right_rounded,
-                size: 16, color: cs.onSurface.withOpacity(0.3)),
+                size: 16, color: cs.onSurface.withValues(alpha: 0.3)),
           ],
         ),
       ),
@@ -280,26 +280,26 @@ class _SessionsPanelState extends State<SessionsPanel> {
       child: Container(
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(color: cs.onSurface.withOpacity(0.08)),
+            top: BorderSide(color: cs.onSurface.withValues(alpha: 0.08)),
           ),
         ),
         padding: const EdgeInsets.fromLTRB(18, 13, 14, 13),
         child: Row(
           children: <Widget>[
             Icon(Icons.settings_outlined,
-                size: 18, color: cs.onSurface.withOpacity(0.55)),
+                size: 18, color: cs.onSurface.withValues(alpha: 0.55)),
             const SizedBox(width: 9),
             Expanded(
               child: Text(
                 s.settings,
                 style: TextStyle(
                   fontSize: 13.5,
-                  color: cs.onSurface.withOpacity(0.7),
+                  color: cs.onSurface.withValues(alpha: 0.7),
                 ),
               ),
             ),
             Icon(Icons.chevron_right_rounded,
-                size: 16, color: cs.onSurface.withOpacity(0.3)),
+                size: 16, color: cs.onSurface.withValues(alpha: 0.3)),
           ],
         ),
       ),
@@ -315,7 +315,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.4,
-          color: cs.onSurface.withOpacity(0.38),
+          color: cs.onSurface.withValues(alpha: 0.38),
         ),
       ),
     );
@@ -328,7 +328,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
       child: Material(
-        color: active ? cs.primary.withOpacity(0.10) : Colors.transparent,
+        color: active ? cs.primary.withValues(alpha: 0.10) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -344,7 +344,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                   Padding(
                     padding: const EdgeInsets.only(right: 5),
                     child: Icon(Icons.push_pin_rounded,
-                        size: 12, color: cs.primary.withOpacity(0.8)),
+                        size: 12, color: cs.primary.withValues(alpha: 0.8)),
                   ),
                 Expanded(
                   child: Column(
@@ -361,7 +361,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                               active ? FontWeight.w600 : FontWeight.w500,
                           color: active
                               ? cs.primary
-                              : cs.onSurface.withOpacity(0.86),
+                              : cs.onSurface.withValues(alpha: 0.86),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -371,7 +371,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11,
-                          color: cs.onSurface.withOpacity(0.38),
+                          color: cs.onSurface.withValues(alpha: 0.38),
                         ),
                       ),
                     ],
@@ -392,7 +392,7 @@ class _SessionsPanelState extends State<SessionsPanel> {
       iconSize: 17,
       tooltip: '',
       icon: Icon(Icons.more_horiz_rounded,
-          size: 17, color: cs.onSurface.withOpacity(0.35)),
+          size: 17, color: cs.onSurface.withValues(alpha: 0.35)),
       onSelected: (String value) async {
         switch (value) {
           case 'pin':

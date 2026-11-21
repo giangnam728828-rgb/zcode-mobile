@@ -280,7 +280,7 @@ class _ComposerState extends State<Composer> {
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
                           color: _focus.hasFocus
-                              ? cs.primary.withOpacity(0.55)
+                              ? cs.primary.withValues(alpha: 0.55)
                               : Colors.transparent,
                           width: 1.2,
                         ),
@@ -334,7 +334,7 @@ class _ComposerState extends State<Composer> {
                             contentPadding:
                                 const EdgeInsets.symmetric(vertical: 11),
                             hintStyle: TextStyle(
-                              color: cs.onSurface.withOpacity(0.38),
+                              color: cs.onSurface.withValues(alpha: 0.38),
                               fontSize: 15,
                             ),
                           ),
@@ -360,7 +360,7 @@ class _ComposerState extends State<Composer> {
       child: IconButton(
         padding: EdgeInsets.zero,
         icon: Icon(Icons.add_rounded,
-            size: 21, color: cs.onSurface.withOpacity(0.62)),
+            size: 21, color: cs.onSurface.withValues(alpha: 0.62)),
         tooltip: widget.s.isEnglish ? 'More' : '更多',
         onPressed: _openTools,
       ),
@@ -454,7 +454,7 @@ class _ComposerState extends State<Composer> {
         itemCount: _suggestions.length,
         separatorBuilder: (_, __) => Divider(
           height: 1,
-          color: cs.onSurface.withOpacity(0.06),
+          color: cs.onSurface.withValues(alpha: 0.06),
         ),
         itemBuilder: (BuildContext ctx, int i) {
           final _Suggestion s = _suggestions[i];
@@ -464,7 +464,7 @@ class _ComposerState extends State<Composer> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               child: Row(
                 children: <Widget>[
-                  Icon(s.icon, size: 16, color: cs.primary.withOpacity(0.8)),
+                  Icon(s.icon, size: 16, color: cs.primary.withValues(alpha: 0.8)),
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
@@ -476,7 +476,7 @@ class _ComposerState extends State<Composer> {
                         fontFamily: s.label.startsWith('/')
                             ? null
                             : 'monospace',
-                        color: cs.onSurface.withOpacity(0.85),
+                        color: cs.onSurface.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
@@ -485,7 +485,7 @@ class _ComposerState extends State<Composer> {
                     s.hint,
                     style: TextStyle(
                       fontSize: 10.5,
-                      color: cs.onSurface.withOpacity(0.38),
+                      color: cs.onSurface.withValues(alpha: 0.38),
                     ),
                   ),
                 ],
@@ -503,10 +503,10 @@ class _ComposerState extends State<Composer> {
       margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
       padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
       decoration: BoxDecoration(
-        color: cs.primary.withOpacity(dark ? 0.10 : 0.06),
+        color: cs.primary.withValues(alpha: dark ? 0.10 : 0.06),
         borderRadius: BorderRadius.circular(9),
         border: Border(
-          left: BorderSide(color: cs.primary.withOpacity(0.6), width: 3),
+          left: BorderSide(color: cs.primary.withValues(alpha: 0.6), width: 3),
         ),
       ),
       child: Row(
@@ -519,7 +519,7 @@ class _ComposerState extends State<Composer> {
               style: TextStyle(
                 fontSize: 11.5,
                 height: 1.4,
-                color: cs.onSurface.withOpacity(0.62),
+                color: cs.onSurface.withValues(alpha: 0.62),
               ),
             ),
           ),
@@ -529,7 +529,7 @@ class _ComposerState extends State<Composer> {
             child: Padding(
               padding: const EdgeInsets.all(6),
               child: Icon(Icons.close_rounded,
-                  size: 14, color: cs.onSurface.withOpacity(0.5)),
+                  size: 14, color: cs.onSurface.withValues(alpha: 0.5)),
             ),
           ),
         ],
@@ -550,9 +550,9 @@ class _ComposerState extends State<Composer> {
           return Container(
             padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
             decoration: BoxDecoration(
-              color: cs.onSurface.withOpacity(0.05),
+              color: cs.onSurface.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.onSurface.withOpacity(0.08)),
+              border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -560,7 +560,7 @@ class _ComposerState extends State<Composer> {
                 Icon(
                   a.isImage ? Icons.image_outlined : Icons.description_outlined,
                   size: 13,
-                  color: cs.primary.withOpacity(0.85),
+                  color: cs.primary.withValues(alpha: 0.85),
                 ),
                 const SizedBox(width: 5),
                 ConstrainedBox(
@@ -571,7 +571,7 @@ class _ComposerState extends State<Composer> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11.5,
-                      color: cs.onSurface.withOpacity(0.72),
+                      color: cs.onSurface.withValues(alpha: 0.72),
                     ),
                   ),
                 ),
@@ -581,7 +581,7 @@ class _ComposerState extends State<Composer> {
                   child: Padding(
                     padding: const EdgeInsets.all(5),
                     child: Icon(Icons.close_rounded,
-                        size: 12, color: cs.onSurface.withOpacity(0.45)),
+                        size: 12, color: cs.onSurface.withValues(alpha: 0.45)),
                   ),
                 ),
               ],
@@ -598,14 +598,14 @@ class _ComposerState extends State<Composer> {
       child: Row(
         children: <Widget>[
           Icon(Icons.schedule_send_outlined,
-              size: 15, color: cs.primary.withOpacity(0.8)),
+              size: 15, color: cs.primary.withValues(alpha: 0.8)),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               '${widget.s.queued} · ${widget.queue.length}',
               style: TextStyle(
                 fontSize: 12.5,
-                color: cs.onSurface.withOpacity(0.62),
+                color: cs.onSurface.withValues(alpha: 0.62),
               ),
             ),
           ),
@@ -637,7 +637,7 @@ class _ComposerState extends State<Composer> {
             ? (showStop
                 ? (dark ? const Color(0xFF2A3140) : const Color(0xFFEDF0F5))
                 : cs.primary)
-            : cs.onSurface.withOpacity(0.07),
+            : cs.onSurface.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(22),
       ),
       child: Material(
@@ -649,8 +649,8 @@ class _ComposerState extends State<Composer> {
             showStop ? Icons.stop_rounded : Icons.arrow_upward_rounded,
             size: showStop ? 20 : 21,
             color: enabled
-                ? (showStop ? cs.onSurface.withOpacity(0.75) : cs.onPrimary)
-                : cs.onSurface.withOpacity(0.3),
+                ? (showStop ? cs.onSurface.withValues(alpha: 0.75) : cs.onPrimary)
+                : cs.onSurface.withValues(alpha: 0.3),
           ),
         ),
       ),
@@ -678,12 +678,12 @@ class _PillButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: emphasized ? cs.primary.withOpacity(0.12) : null,
+          color: emphasized ? cs.primary.withValues(alpha: 0.12) : null,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: emphasized
-                ? cs.primary.withOpacity(0.35)
-                : cs.onSurface.withOpacity(0.16),
+                ? cs.primary.withValues(alpha: 0.35)
+                : cs.onSurface.withValues(alpha: 0.16),
           ),
         ),
         child: Text(
@@ -691,7 +691,7 @@ class _PillButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             fontWeight: FontWeight.w600,
-            color: emphasized ? cs.primary : cs.onSurface.withOpacity(0.6),
+            color: emphasized ? cs.primary : cs.onSurface.withValues(alpha: 0.6),
           ),
         ),
       ),

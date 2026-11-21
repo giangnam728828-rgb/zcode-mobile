@@ -123,7 +123,7 @@ class _PluginsPageState extends State<PluginsPage>
                       },
                     ),
               filled: true,
-              fillColor: cs.onSurface.withOpacity(0.04),
+              fillColor: cs.onSurface.withValues(alpha: 0.04),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -158,7 +158,7 @@ class _PluginsPageState extends State<PluginsPage>
                     en ? 'Nothing matches' : '没有匹配的插件',
                     style: TextStyle(
                       fontSize: 12,
-                      color: cs.onSurface.withOpacity(0.4),
+                      color: cs.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 )
@@ -192,9 +192,9 @@ class _PluginsPageState extends State<PluginsPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(13, 12, 12, 12),
       decoration: BoxDecoration(
-        color: cs.onSurface.withOpacity(0.035),
+        color: cs.onSurface.withValues(alpha: 0.035),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: cs.onSurface.withOpacity(0.07)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,7 +231,7 @@ class _PluginsPageState extends State<PluginsPage>
                       style: TextStyle(
                         fontSize: 11.5,
                         height: 1.5,
-                        color: cs.onSurface.withOpacity(0.5),
+                        color: cs.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -253,7 +253,7 @@ class _PluginsPageState extends State<PluginsPage>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 10.5,
-                    color: cs.onSurface.withOpacity(0.32),
+                    color: cs.onSurface.withValues(alpha: 0.32),
                   ),
                 ),
               ),
@@ -303,7 +303,7 @@ class _PluginsPageState extends State<PluginsPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: cs.primary.withOpacity(0.1),
+        color: cs.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -452,7 +452,7 @@ class _PluginsPageState extends State<PluginsPage>
             style: TextStyle(
               fontSize: 12.5,
               height: 1.6,
-              color: cs.onSurface.withOpacity(0.42),
+              color: cs.onSurface.withValues(alpha: 0.42),
             ),
           ),
         ),
@@ -467,9 +467,9 @@ class _PluginsPageState extends State<PluginsPage>
         return Container(
           padding: const EdgeInsets.fromLTRB(13, 10, 8, 10),
           decoration: BoxDecoration(
-            color: cs.onSurface.withOpacity(0.035),
+            color: cs.onSurface.withValues(alpha: 0.035),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.onSurface.withOpacity(0.07)),
+            border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -498,7 +498,7 @@ class _PluginsPageState extends State<PluginsPage>
                           '${p.manifest.mcp.isEmpty ? '' : ' · MCP ${p.manifest.mcp.length}'}',
                           style: TextStyle(
                             fontSize: 10.5,
-                            color: cs.onSurface.withOpacity(0.35),
+                            color: cs.onSurface.withValues(alpha: 0.35),
                           ),
                         ),
                       ],
@@ -536,12 +536,12 @@ class _PluginsPageState extends State<PluginsPage>
                             fontSize: 10,
                             fontFamily: 'monospace',
                             height: 1.5,
-                            color: cs.onSurface.withOpacity(0.32),
+                            color: cs.onSurface.withValues(alpha: 0.32),
                           ),
                         ),
                       ),
                       Icon(Icons.edit_outlined,
-                          size: 14, color: cs.onSurface.withOpacity(0.3)),
+                          size: 14, color: cs.onSurface.withValues(alpha: 0.3)),
                     ],
                   ),
                 ),
@@ -589,7 +589,7 @@ class _PluginsPageState extends State<PluginsPage>
                         ListTile(
                           dense: true,
                           leading: Icon(Icons.description_outlined,
-                              size: 18, color: cs.onSurface.withOpacity(0.5)),
+                              size: 18, color: cs.onSurface.withValues(alpha: 0.5)),
                           title: Text(
                             f,
                             style: const TextStyle(
@@ -638,7 +638,7 @@ class _PluginsPageState extends State<PluginsPage>
           style: TextStyle(
             fontSize: 11.5,
             height: 1.6,
-            color: cs.onSurface.withOpacity(0.45),
+            color: cs.onSurface.withValues(alpha: 0.45),
           ),
         ),
         const SizedBox(height: 12),
@@ -675,7 +675,7 @@ class _PluginsPageState extends State<PluginsPage>
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: cs.onSurface.withOpacity(0.03),
+              color: cs.onSurface.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -685,7 +685,7 @@ class _PluginsPageState extends State<PluginsPage>
               style: TextStyle(
                 fontSize: 11.5,
                 height: 1.6,
-                color: cs.onSurface.withOpacity(0.42),
+                color: cs.onSurface.withValues(alpha: 0.42),
               ),
             ),
           )
@@ -695,9 +695,9 @@ class _PluginsPageState extends State<PluginsPage>
               margin: const EdgeInsets.only(bottom: 9),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: cs.onSurface.withOpacity(0.035),
+                color: cs.onSurface.withValues(alpha: 0.035),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.onSurface.withOpacity(0.07)),
+                border: Border.all(color: cs.onSurface.withValues(alpha: 0.07)),
               ),
               child: Row(
                 children: <Widget>[
@@ -712,7 +712,7 @@ class _PluginsPageState extends State<PluginsPage>
                         ? const Color(0xFF2E9E5B)
                         : st.state == 'error'
                             ? cs.error
-                            : cs.onSurface.withOpacity(0.35),
+                            : cs.onSurface.withValues(alpha: 0.35),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -731,7 +731,7 @@ class _PluginsPageState extends State<PluginsPage>
                             style: TextStyle(
                               fontSize: 10.5,
                               height: 1.45,
-                              color: cs.onSurface.withOpacity(0.4),
+                              color: cs.onSurface.withValues(alpha: 0.4),
                             ),
                           ),
                         ],
@@ -743,7 +743,7 @@ class _PluginsPageState extends State<PluginsPage>
                       '${st.tools} 个工具',
                       style: TextStyle(
                         fontSize: 10,
-                        color: cs.onSurface.withOpacity(0.35),
+                        color: cs.onSurface.withValues(alpha: 0.35),
                       ),
                     ),
                 ],

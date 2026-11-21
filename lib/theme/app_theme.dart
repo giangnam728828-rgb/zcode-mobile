@@ -116,7 +116,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: scheme.primary, width: 1.6),
         ),
-        hintStyle: TextStyle(color: scheme.onSurface.withOpacity(0.42)),
+        hintStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.42)),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
