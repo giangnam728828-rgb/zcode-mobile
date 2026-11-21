@@ -1,14 +1,15 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
     localPropertiesFile.withReader('UTF-8') { reader ->
         localProperties.load(reader)
     }
-}
-
-def flutterRoot = localProperties.getProperty('flutter.sdk')
-if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
 }
 
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
@@ -30,10 +31,6 @@ if (keystorePropertiesFile.exists()) {
         keystoreProperties.load(reader)
     }
 }
-
-apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
-apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
     namespace 'ai.zcode.zcode_mobile'
@@ -110,12 +107,12 @@ flutter {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    // The Kotlin Gradle plugin adds kotlin-stdlib itself; listing it here
+    // would pin a version that no longer matches the compiler.
     // FileProvider for handing a real file to another app.
     implementation 'androidx.core:core:1.13.1'
     // Shizuku: run privileged shell commands through the shell uid without
-    // root. 12.x is used deliberately — it is built with Kotlin 1.5 metadata,
-    // which the toolchain pinned by this Flutter release can still read.
+    // root.
     implementation 'dev.rikka.shizuku:api:12.1.0'
     implementation 'dev.rikka.shizuku:provider:12.1.0'
 }
