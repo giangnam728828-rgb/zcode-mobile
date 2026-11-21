@@ -26,7 +26,7 @@ object EventHub {
             replay = pending.toList()
             pending.clear()
         }
-        for (event in replay) main.post { next(event) }
+        for (event in replay) main.post { runCatching { next(event) } }
     }
 
     fun detach() {
@@ -48,5 +48,4 @@ object EventHub {
             } catch (e: Throwable) {
             }
         }
-    }
-}
+    }}
