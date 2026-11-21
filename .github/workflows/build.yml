@@ -69,10 +69,15 @@ jobs:
         env:
           EXPECTED_SHA256: '32:0B:A9:4F:FD:6A:CB:DD:2B:C2:1A:85:2C:4B:69:C0:F3:67:1B:8C:35:BE:27:E2:B9:A8:0C:71:53:C4:9F:4A'
         run: |
-          rm -rf /tmp/cert && mkdir -p /tmp/cert
-          unzip -o -q out/zcode-mobile.apk 'META-INF/*.RSA' -d /tmp/cert
-          RSA="$(ls /tmp/cert/META-INF/*.RSA | head -1)"
-          ACTUAL="$(openssl pkcs7 -inform DER -in "$RSA" -print_certs 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | sed 's/^.*=//')"
+          # AGP 9 signs with v2/v3 only, so there is no META-INF/*.RSA to read.
+          # apksigner reports the certificate actually embedded in the APK.
+          APKSIGNER="$(ls -1 "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+          echo "apksigner: ${APKSIGNER:-<none>}"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found; cannot verify the signature"
+            exit 1
+          fi
+          ACTUAL="$("$APKSIGNER" verify --print-certs out/zcode-mobile.apk | grep -m1 'SHA-256 digest' | sed 's/^.*digest: //')"
           echo "expected: $EXPECTED_SHA256"
           echo "actual  : $ACTUAL"
           if [ "$ACTUAL" != "$EXPECTED_SHA256" ]; then
