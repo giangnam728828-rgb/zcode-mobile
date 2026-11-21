@@ -84,7 +84,7 @@ class AppTheme {
         thickness: 1,
         color: dark ? const Color(0xFF1E232B) : const Color(0xFFE9ECF1),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         color: scheme.surface,
         margin: EdgeInsets.zero,
@@ -132,7 +132,7 @@ class AppTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: dark ? const Color(0xFF14181E) : Colors.white,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

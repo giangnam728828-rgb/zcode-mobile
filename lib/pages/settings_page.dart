@@ -635,8 +635,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: ElevatedButton(
                   onPressed: () => _save(state),
                   style: ElevatedButton.styleFrom(
-                    primary: cs.primary,
-                    onPrimary: cs.onPrimary,
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(13),

@@ -262,8 +262,8 @@ class _ModulesPageState extends State<ModulesPage> {
               child: ElevatedButton(
                 onPressed: _remoteBusy ? null : _installRemote,
                 style: ElevatedButton.styleFrom(
-                  primary: cs.primary,
-                  onPrimary: cs.onPrimary,
+                  backgroundColor: cs.primary,
+                  foregroundColor: cs.onPrimary,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(11),

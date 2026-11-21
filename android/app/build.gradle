@@ -36,16 +36,16 @@ apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    compileSdkVersion 33
-    buildToolsVersion '33.0.1'
+    namespace 'ai.zcode.zcode_mobile'
+    compileSdk 36
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 
     sourceSets {
@@ -56,8 +56,8 @@ android {
         applicationId "ai.zcode.zcode_mobile"
         // 23 (Android 6) is the floor for Shizuku's provider and for the
         // settings/DND APIs the automation uses; 5.x is not a target device.
-        minSdkVersion 23
-        targetSdkVersion 33
+        minSdk 23
+        targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
@@ -83,7 +83,7 @@ android {
 
     // The device channel talks to API 30+ storage APIs behind runtime guards;
     // lint's NewApi check cannot see those guards and would fail the release.
-    lintOptions {
+    lint {
         checkReleaseBuilds false
         abortOnError false
     }
@@ -110,9 +110,9 @@ flutter {
 }
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     // FileProvider for handing a real file to another app.
-    implementation 'androidx.core:core:1.9.0'
+    implementation 'androidx.core:core:1.13.1'
     // Shizuku: run privileged shell commands through the shell uid without
     // root. 12.x is used deliberately — it is built with Kotlin 1.5 metadata,
     // which the toolchain pinned by this Flutter release can still read.

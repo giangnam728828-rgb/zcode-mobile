@@ -286,8 +286,8 @@ class _PluginsPageState extends State<PluginsPage>
                   label: Text(en ? 'Install' : '安装',
                       style: const TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    primary: cs.primary,
-                    onPrimary: cs.onPrimary,
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
@@ -663,8 +663,8 @@ class _PluginsPageState extends State<PluginsPage>
                 label: Text(en ? 'Reconnect' : '重新连接',
                     style: const TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
-                  primary: cs.primary,
-                  onPrimary: cs.onPrimary,
+                  backgroundColor: cs.primary,
+                  foregroundColor: cs.onPrimary,
                 ),
               ),
             ),
