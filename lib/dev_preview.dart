@@ -37,7 +37,9 @@ Widget _pageFor(String? page) {
     case 'workspace':
       return const WorkspacePickerPage();
     default:
-      return const HomeShell();
+      return HomeShell(
+        initialTab: int.tryParse(Uri.base.queryParameters['tab'] ?? '') ?? 0,
+      );
   }
 }
 
@@ -46,6 +48,7 @@ void main() {
   final bool empty = Uri.base.queryParameters['empty'] == '1';
   final AppState state = AppState();
   state.config = AppConfig.empty.copyWith(model: 'glm-4.6');
+  state.config = state.config!.copyWith(glassQuality: 'full');
   // The web preview has no real workspace, but the market tab is pure catalog.
   state.pluginCenter = PluginCenter(null);
   state.automation = AutomationEngine(

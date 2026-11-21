@@ -12,7 +12,11 @@ import '../state/app_state.dart';
 /// A real shell inside the app sandbox. Not a full pty, but enough to inspect
 /// the workspace, chain commands and see exactly what the agent would see.
 class TerminalPage extends StatefulWidget {
-  const TerminalPage({Key? key}) : super(key: key);
+  const TerminalPage({Key? key, this.embedded = false}) : super(key: key);
+
+  /// Hosted inside the root shell: no back arrow, and the shared
+  /// liquid backdrop stays visible behind the page.
+  final bool embedded;
 
   @override
   State<TerminalPage> createState() => _TerminalPageState();
@@ -238,7 +242,9 @@ class _TerminalPageState extends State<TerminalPage> {
     ];
 
     return Scaffold(
+      backgroundColor: widget.embedded ? Colors.transparent : null,
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.embedded,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[

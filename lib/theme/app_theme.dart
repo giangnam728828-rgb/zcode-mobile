@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/app_config.dart';
+import 'tokens.dart';
 
 /// Builds both themes from one accent seed. Material 3 with a restrained
 /// surface palette: near-black in dark mode, warm grey in light mode.
 class AppTheme {
-  static const Color _lightBg = Color(0xFFF5F6F8);
-  static const Color _darkBg = Color(0xFF0C0E12);
+  static const Color _lightBg = AppPalette.lightBg;
+  static const Color _darkBg = AppPalette.darkBg;
 
   /// Keeps the Android status/navigation bars flush with the app background
   /// instead of letting the platform paint a mismatched band above the UI.
@@ -26,20 +27,24 @@ class AppTheme {
 
   static ThemeData build(int seed, Brightness brightness, double fontScale) {
     final bool dark = brightness == Brightness.dark;
+    final AppPalette p = dark ? AppPalette.dark : AppPalette.light;
+    // One seed, everything else neutral. Tinting the whole surface scale would
+    // put colour under the glass, which is exactly the look we are avoiding.
     final ColorScheme scheme = ColorScheme.fromSeed(
       seedColor: Color(seed),
       brightness: brightness,
     ).copyWith(
-      background: dark ? _darkBg : _lightBg,
-      surface: dark ? const Color(0xFF12151A) : Colors.white,
+      background: p.bg,
+      surface: p.surface,
+      onSurface: p.text,
     );
 
     final ThemeData base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       brightness: brightness,
-      scaffoldBackgroundColor: dark ? _darkBg : _lightBg,
-      canvasColor: dark ? _darkBg : _lightBg,
+      scaffoldBackgroundColor: p.bg,
+      canvasColor: p.bg,
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.standard,
     );
@@ -82,39 +87,33 @@ class AppTheme {
       dividerTheme: DividerThemeData(
         space: 1,
         thickness: 1,
-        color: dark ? const Color(0xFF1E232B) : const Color(0xFFE9ECF1),
+        color: p.line,
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         color: scheme.surface,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(
-            color: dark ? const Color(0xFF1E232B) : const Color(0xFFE9ECF1),
-          ),
+          borderRadius: BorderRadius.circular(AppTokens.rLg),
+          side: BorderSide(color: p.line, width: 0.8),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: dark ? const Color(0xFF161A20) : Colors.white,
+        fillColor: p.surfaceRaised,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFF242A33) : const Color(0xFFE1E5EC),
-          ),
+          borderRadius: BorderRadius.circular(AppTokens.rSm),
+          borderSide: BorderSide(color: p.line, width: 0.8),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: dark ? const Color(0xFF242A33) : const Color(0xFFE1E5EC),
-          ),
+          borderRadius: BorderRadius.circular(AppTokens.rSm),
+          borderSide: BorderSide(color: p.line, width: 0.8),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.primary, width: 1.6),
+          borderRadius: BorderRadius.circular(AppTokens.rSm),
+          borderSide: BorderSide(color: scheme.primary, width: 1.4),
         ),
         hintStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.42)),
       ),
@@ -127,13 +126,13 @@ class AppTheme {
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: dark ? const Color(0xFF12151A) : Colors.white,
+        backgroundColor: p.surface,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
         ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: dark ? const Color(0xFF14181E) : Colors.white,
+        backgroundColor: p.surface,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),

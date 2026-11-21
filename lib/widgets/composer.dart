@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../agent/commands.dart';
 import '../l10n/strings.dart';
 import '../models/attachment.dart';
+import '../theme/tokens.dart';
 
 /// The single-input composer. One send key: while a turn runs, text is queued
 /// instead of blocked (same model as DSH Go), and the key becomes stop when
@@ -33,6 +34,7 @@ class Composer extends StatefulWidget {
     this.onOpenModules,
     this.filePaths = const <String>[],
     this.extraCommands = const <SlashCommand>[],
+    this.embedded = false,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -56,6 +58,10 @@ class Composer extends StatefulWidget {
 
   /// Commands contributed by installed plugins.
   final List<SlashCommand> extraCommands;
+
+  /// Hosted by the root shell: the bar sits on the shared backdrop instead of
+  /// painting an opaque strip, and leaves the bottom inset to the shell.
+  final bool embedded;
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -250,11 +256,13 @@ class _ComposerState extends State<Composer> {
     final Color border =
         dark ? const Color(0xFF262D38) : const Color(0xFFE3E8F0);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: dark ? const Color(0xFF101318) : Colors.white,
-        border: Border(top: BorderSide(color: border)),
-      ),
+    final Widget body = Container(
+      decoration: widget.embedded
+          ? null
+          : BoxDecoration(
+              color: dark ? const Color(0xFF101318) : Colors.white,
+              border: Border(top: BorderSide(color: border)),
+            ),
       child: SafeArea(
         top: false,
         child: Column(
@@ -350,6 +358,21 @@ class _ComposerState extends State<Composer> {
           ],
         ),
       ),
+    );
+
+    if (!widget.embedded) return body;
+    final AppPalette p = AppPalette.of(context);
+    // No backdrop filter here on purpose: nothing scrolls *under* this bar, so
+    // a blur pass would cost a frame and change nothing. A near-opaque fill
+    // still picks up the backdrop's light pool, which is the visible part.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: p.isDark
+            ? Colors.white.withValues(alpha: 0.035)
+            : Colors.white.withValues(alpha: 0.72),
+        border: Border(top: BorderSide(color: p.line, width: 0.8)),
+      ),
+      child: body,
     );
   }
 

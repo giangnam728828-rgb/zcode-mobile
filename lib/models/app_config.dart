@@ -52,6 +52,10 @@ class AppConfig {
   final double fontScale; // 0.9 / 1.0 / 1.1 / 1.2
   final String language; // 'zh' | 'en'
 
+  /// 'soft' | 'full' | 'flat'. Controls how much backdrop filtering the glass
+  /// surfaces are allowed to use; see GlassQuality.
+  final String glassQuality;
+
   /// Tool approval policy: 'risky' asks only for destructive shell/file writes,
   /// 'ask' asks for every tool, 'auto' lets the agent run unattended.
   final String approvalMode;
@@ -76,6 +80,7 @@ class AppConfig {
     this.accentId = 'indigo',
     this.fontScale = 1.0,
     this.language = 'zh',
+    this.glassQuality = 'soft',
     this.approvalMode = 'risky',
     this.temperature = 0.7,
     this.autoCompact = true,
@@ -122,6 +127,7 @@ class AppConfig {
     String? accentId,
     double? fontScale,
     String? language,
+    String? glassQuality,
     String? approvalMode,
     double? temperature,
     bool? autoCompact,
@@ -138,6 +144,7 @@ class AppConfig {
       accentId: accentId ?? this.accentId,
       fontScale: fontScale ?? this.fontScale,
       language: language ?? this.language,
+      glassQuality: glassQuality ?? this.glassQuality,
       approvalMode: approvalMode ?? this.approvalMode,
       temperature: temperature ?? this.temperature,
       autoCompact: autoCompact ?? this.autoCompact,
@@ -156,6 +163,7 @@ class AppConfig {
         'accentId': accentId,
         'fontScale': fontScale,
         'language': language,
+        'glassQuality': glassQuality,
         'approvalMode': approvalMode,
         'temperature': temperature,
         'autoCompact': autoCompact,
@@ -180,6 +188,7 @@ class AppConfig {
       accentId: (json['accentId'] as String?) ?? 'indigo',
       fontScale: fs.clamp(0.85, 1.3),
       language: (json['language'] as String?) ?? 'zh',
+      glassQuality: (json['glassQuality'] as String?) ?? 'soft',
       approvalMode: (json['approvalMode'] as String?) ?? 'risky',
       temperature: temp.clamp(0.0, 1.0),
       autoCompact: (json['autoCompact'] as bool?) ?? true,

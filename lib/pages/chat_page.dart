@@ -10,6 +10,8 @@ import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../state/app_state.dart';
+import '../theme/glass.dart';
+import '../theme/tokens.dart';
 import '../widgets/composer.dart';
 import '../widgets/message_bubble.dart';
 import 'files_page.dart';
@@ -26,11 +28,16 @@ class ChatPage extends StatefulWidget {
     Key? key,
     required this.s,
     required this.wide,
+    this.embedded = false,
     this.onOpenSessions,
   }) : super(key: key);
 
   final S s;
   final bool wide;
+
+  /// Hosted by [RootShell]: the page supplies no background of its own and
+  /// draws its header as a glass bar over the shared backdrop.
+  final bool embedded;
   final VoidCallback? onOpenSessions;
 
   @override
@@ -178,6 +185,7 @@ class _ChatPageState extends State<ChatPage> {
         ),
         Composer(
           controller: _input,
+          embedded: widget.embedded,
           streaming: state.streaming,
           queue: state.queue,
           s: s,
@@ -891,16 +899,18 @@ class _ChatPageState extends State<ChatPage> {
     final String title = (convo?.previewTitle().isNotEmpty ?? false)
         ? convo!.previewTitle()
         : s.newChatShort;
-    return Container(
+    final Widget bar = Container(
       padding: EdgeInsets.fromLTRB(widget.wide ? 20 : 6, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: dark ? const Color(0xFF0C0E12) : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: cs.onSurface.withValues(alpha: 0.07),
-          ),
-        ),
-      ),
+      decoration: widget.embedded
+          ? null
+          : BoxDecoration(
+              color: dark ? const Color(0xFF0C0E12) : Colors.white,
+              border: Border(
+                bottom: BorderSide(
+                  color: cs.onSurface.withValues(alpha: 0.07),
+                ),
+              ),
+            ),
       child: SafeArea(
         bottom: false,
         child: Row(
@@ -921,8 +931,10 @@ class _ChatPageState extends State<ChatPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 15.5,
+                      fontSize: 16.5,
+                      height: 1.2,
                       fontWeight: FontWeight.w600,
+                      letterSpacing: -0.1,
                       color: cs.onSurface,
                     ),
                   ),
@@ -953,6 +965,24 @@ class _ChatPageState extends State<ChatPage> {
             _moreMenu(state, s, convo),
           ],
         ),
+      ),
+    );
+
+    if (!widget.embedded) return bar;
+    // Inside the shell the header is a real glass bar: the backdrop is
+    // refracted by 6% so text scrolling under it visibly bends.
+    final AppPalette p = AppPalette.of(context);
+    return GlassSurface(
+      radius: 0,
+      blur: 18,
+      quality: GlassQuality.full,
+      shadow: false,
+      border: false,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: p.line, width: 0.8)),
+        ),
+        child: bar,
       ),
     );
   }
@@ -1251,29 +1281,15 @@ class _EmptyState extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               Container(
-                width: 62,
-                height: 62,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: <Color>[
-                      cs.primary,
-                      cs.primary.withValues(alpha: 0.65),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: <BoxShadow>[
-                    BoxShadow(
-                      color: cs.primary.withValues(alpha: dark ? 0.30 : 0.22),
-                      blurRadius: 22,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+                  color: cs.primary,
+                  borderRadius: AppTokens.brMd,
                 ),
                 alignment: Alignment.center,
                 child: const Icon(Icons.bolt_rounded,
-                    size: 34, color: Colors.white),
+                    size: 28, color: Colors.white),
               ),
               const SizedBox(height: 18),
               Text(
@@ -1355,16 +1371,24 @@ class _EmptyState extends StatelessWidget {
     required ColorScheme cs,
     required bool dark,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: dark ? const Color(0xFF14181F) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
-        ),
+    return PressScale(
+      radius: AppTokens.rSm,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: AppTokens.brSm,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppTokens.brSm,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: AppTokens.brSm,
+              border: Border.all(
+                color: cs.onSurface.withValues(alpha: 0.08),
+                width: 0.8,
+              ),
+            ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
@@ -1374,10 +1398,12 @@ class _EmptyState extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11.5,
-                color: cs.onSurface.withValues(alpha: 0.7),
+                color: cs.onSurface.withValues(alpha: 0.72),
               ),
             ),
           ],
+            ),
+          ),
         ),
       ),
     );
@@ -1391,35 +1417,39 @@ class _PromptCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme cs = theme.colorScheme;
-    final bool dark = theme.brightness == Brightness.dark;
-    return Material(
-      color: dark ? const Color(0xFF12151A) : Colors.white,
-      borderRadius: BorderRadius.circular(13),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(13),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: cs.onSurface.withValues(alpha: 0.82),
+    final ColorScheme cs = Theme.of(context).colorScheme;
+    final AppPalette p = AppPalette.of(context);
+    return PressScale(
+      radius: AppTokens.rSm,
+      child: Material(
+        color: p.surface,
+        borderRadius: AppTokens.brSm,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppTokens.brSm,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: AppTokens.brSm,
+              border: Border.all(color: p.line, width: 0.8),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: p.textSecondary,
+                    ),
                   ),
                 ),
-              ),
-              Icon(Icons.north_east_rounded,
-                  size: 14, color: cs.onSurface.withValues(alpha: 0.28)),
-            ],
+                const SizedBox(width: 10),
+                Icon(Icons.arrow_forward_rounded,
+                    size: 14, color: cs.primary.withValues(alpha: 0.7)),
+              ],
+            ),
           ),
         ),
       ),

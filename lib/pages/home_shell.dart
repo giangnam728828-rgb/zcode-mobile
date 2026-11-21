@@ -7,12 +7,16 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import 'automation_page.dart';
 import 'chat_page.dart';
+import 'root_shell.dart';
 import 'sessions_drawer.dart';
 
 /// Adaptive shell: drawer + single pane on phones, permanent sidebar beside a
 /// centred transcript on tablets, foldables and the web build.
 class HomeShell extends StatefulWidget {
-  const HomeShell({Key? key}) : super(key: key);
+  const HomeShell({Key? key, this.initialTab = 0}) : super(key: key);
+
+  /// Only used by lib/dev_preview.dart.
+  final int initialTab;
 
   static const double breakpoint = 780;
 
@@ -21,8 +25,6 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
-  final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
-
   @override
   void initState() {
     super.initState();
@@ -90,21 +92,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       );
     }
 
-    return Scaffold(
-      key: _scaffold,
-      drawer: Drawer(
-        width: math.min(320, width * 0.86),
-        shape: const RoundedRectangleBorder(),
-        child: SessionsPanel(
-          s: s,
-          onPicked: () => Navigator.of(context).maybePop(),
-        ),
-      ),
-      body: ChatPage(
-        s: s,
-        wide: false,
-        onOpenSessions: () => _scaffold.currentState?.openDrawer(),
-      ),
-    );
+    return RootShell(s: s, initialIndex: widget.initialTab);
   }
 }

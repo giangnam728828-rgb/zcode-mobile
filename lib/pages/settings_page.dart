@@ -11,6 +11,8 @@ import '../platform/device_bridge.dart';
 import '../services/account.dart';
 import '../services/workspace.dart';
 import '../state/app_state.dart';
+import '../theme/glass.dart';
+import '../theme/tokens.dart';
 import 'automation_page.dart';
 import 'files_page.dart';
 import 'modules_page.dart';
@@ -19,7 +21,11 @@ import 'terminal_page.dart';
 import 'workspace_picker_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({Key? key, this.embedded = false}) : super(key: key);
+
+  /// Hosted inside the root shell: no back arrow, and the shared
+  /// liquid backdrop stays visible behind the page.
+  final bool embedded;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -146,7 +152,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final ColorScheme cs = theme.colorScheme;
 
     return Scaffold(
+      backgroundColor: widget.embedded ? Colors.transparent : null,
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.embedded,
         title: Text(s.settings),
         actions: <Widget>[
           if (_dirty)
@@ -166,8 +174,9 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 40),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
         children: <Widget>[
+          _autoEntry(state, cs, s),
           _section(s.account, cs),
           _card(<Widget>[
             _providerRow(c, state, s, cs),
@@ -660,6 +669,69 @@ class _SettingsPageState extends State<SettingsPage> {
     if (scale <= 1.02) return 'M';
     if (scale <= 1.12) return 'L';
     return 'XL';
+  }
+
+  /// Automation used to be its own dock tab. It lives here now, at the very
+  /// top, because it is the one group you come back to every few days — and
+  /// burying it under the account form would make it effectively invisible.
+  Widget _autoEntry(AppState state, ColorScheme cs, S s) {
+    final bool en = s.isEnglish;
+    final int rules = state.automation?.enabledRules.length ?? 0;
+    final int today = state.automation?.todayRuns ?? 0;
+    final AppPalette p = AppPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: SolidCard(
+        radius: AppTokens.rLg,
+        padding: const EdgeInsets.fromLTRB(13, 12, 10, 12),
+        onTap: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AutomationPage()),
+          );
+          if (mounted) setState(() {});
+        },
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.12),
+                borderRadius: AppTokens.brSm,
+              ),
+              child: Icon(Icons.auto_awesome_rounded,
+                  size: 18, color: cs.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    en ? 'Automation' : '自动化',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: p.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    <String>[
+                      '$rules ${en ? 'rules' : '条规则'}',
+                      '${en ? 'today' : '今天'} $today',
+                      state.privilege.label,
+                    ].join(' · '),
+                    style: TextStyle(fontSize: 11, color: p.textTertiary),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: p.textTertiary),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _navRow({

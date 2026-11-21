@@ -15,7 +15,11 @@ import 'workspace_picker_page.dart';
 /// Workspace browser: the phone-side equivalent of the desktop file tree.
 /// Files can be created, renamed, deleted, edited and referenced in chat.
 class FilesPage extends StatefulWidget {
-  const FilesPage({Key? key}) : super(key: key);
+  const FilesPage({Key? key, this.embedded = false}) : super(key: key);
+
+  /// Hosted inside the root shell: no back arrow, and the shared
+  /// liquid backdrop stays visible behind the page.
+  final bool embedded;
 
   @override
   State<FilesPage> createState() => _FilesPageState();
@@ -104,7 +108,9 @@ class _FilesPageState extends State<FilesPage> {
     }
 
     return Scaffold(
+      backgroundColor: widget.embedded ? Colors.transparent : null,
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.embedded,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[

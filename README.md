@@ -120,6 +120,7 @@
 
 ## 手机端交互
 
+- **导航**：底部悬浮玻璃 Dock 四项——对话 / 文件 / 终端 / 设置，切页保状态（草稿、滚动位置都不丢）；**自动化、扩展模块、插件在设置页里**，自动化排在最上方一张卡；
 - **输入**：`/` 弹命令面板，`@` 补全工作区文件并把内容随消息附上；图片会作为 image block 直传模型；
 - **发送**：生成中继续输入会排队（带附件），可「立即发送」或清空队列；空输入时按钮变停止；
 - **阅读**：倒序列表 + 吸底滚动、上滑自动脱离、右下角回到底部、长会话只渲染最近 30 条并可「加载更早」；
@@ -289,6 +290,17 @@ termux-reload-settings
 
 也可以从链接安装 `tar.gz` / `tgz` / `zip`：压缩包里的 `bin/` 目录会被注册进 PATH，Agent 和终端立刻可用；一键卸载。
 
+## 界面
+
+v3.5.0 起界面换成液态玻璃材质：玻璃只出现在**固定的控制层**（顶栏、Dock、输入栏、弹层），消息、卡片、列表一律实色。原因很实际——每层毛玻璃都是一次离屏渲染，列表里铺 20 个就会掉到 30fps；而玻璃只有叠在内容上才有意义。
+
+- 背景是一层中性底色加两团很淡的光（4–6% alpha），给玻璃提供可折射的东西，不抢内容；
+- 玻璃分三档：`soft`（默认，模糊 + 顶点高光）、`full`（再加 1.06× 折射）、`flat`（纯半透明，低端机用），配置项 `glassQuality`；
+- 动效统一走 `AppTokens`：按压放大 1.03 后弹性回弹，页面切换 260ms 淡入上移，键盘弹出时 Dock 自动收起；
+- 深浅色共用一套语义色板，正文对比度按 4.5:1 卡（`test/theme_test.dart` 会校验）。
+
+设计令牌在 `lib/theme/tokens.dart`，玻璃组件在 `lib/theme/glass.dart`，改版方案与落地记录在 `docs/UI-REDESIGN.md`。
+
 ## 其他
 
 - **会话**：多会话、自动标题、置顶、归档、搜索、重命名、复制、删除
@@ -334,19 +346,25 @@ lib/
   pages/workspace_picker_page.dart 手机上选目录（含权限引导）
   pages/automation_page.dart 规则列表、编辑器、模板与运行记录
   pages/terminal_page.dart  终端（内置 sh / Termux / 特权）
+  pages/root_shell.dart     手机壳：四页 IndexedStack + 悬浮 Dock
+  theme/tokens.dart         设计令牌：间距 / 圆角 / 动效 / 语义色 / 玻璃档位
+  theme/glass.dart          液态玻璃组件、实色卡、按压缩放、液体背景
+  widgets/app_dock.dart     底部悬浮玻璃导航（四项 + 液体选中胶囊）
   pages/modules_page.dart   扩展模块管理
   pages/plugins_page.dart   插件市场 / 已安装 / MCP 三栏
   widgets/composer.dart     命令/文件补全、附件、引用、队列
   widgets/tool_card.dart    工具卡与计划卡
 docs/RESEARCH.md            12 个同类项目的对比与取舍
 docs/PARITY.md              与桌面版 ZCode 的能力对照
+docs/UI-REDESIGN.md         视觉改版方案与 P1 落地记录
+docs/UPGRADE-3.50.md        从 Flutter 3.0 升到 3.50 的完整记录
 lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口（不参与 APK）
 ```
 
 ## 已验证
 
 - `flutter analyze` → **No issues found**
-- `flutter test` → **73/73 通过**，覆盖：
+- `flutter test` → **81/81 通过**，覆盖：
   - 假模型服务端跑通完整闭环：`bash` 真执行、`tool_result` 回传、拒绝审批不落盘、越权路径被拦；
   - `glob` / `grep` / `mkdir` / `move` / `delete` / `todo_write` 的行为；
   - 回合快照：新建文件被删、改过的文件内容还原；
@@ -360,6 +378,7 @@ lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口
   - 子智能体只能派发一层；
   - 插件页点「安装」后文件落盘、按钮变「已安装」；
   - 工作区：路径归一化、「内部存储」标签、不可写目录被拒、切换后工具链指向新目录、`.zcode/bin` 领先 PATH、沙箱与 `/storage/**` 的放行边界；
+  - 设计令牌：圆角/时长有序、按压幅度在 1.00–1.06、深浅色面层亮度递进、正文与次要文字对比度 ≥ 4.5:1、玻璃档位字符串往返；
   - 自动化：间隔 / 每日 / 星期过滤、电量阈值迟滞、Wi-Fi SSID 匹配、事件只触发对应规则、动作按序执行且首个失败即停、规则 JSON 往返、模板可直接用、设备动作到 shell 命令的映射。
   - 手机事件：通知按应用+关键词匹配、前台应用匹配、屏幕文字匹配、充满判定、息屏间隔；一句话解析器覆盖 Wi-Fi / 电量 / 验证码 / 屏幕文字 / 息屏 / 打开应用六类说法。
 
