@@ -84,6 +84,8 @@ class ToolCall {
         return '${input['url'] ?? ''}';
       case 'todo_write':
         return '计划 · ${todos.where((TodoEntry t) => t.done).length}/${todos.length}';
+      case 'task':
+        return '${input['agent'] ?? '子智能体'} · ${input['description'] ?? ''}';
       default:
         return name;
     }
@@ -142,6 +144,18 @@ class ToolSpec {
       };
 }
 
+/// A tool contributed from outside the built-in set — an MCP server, or any
+/// plugin that wants to expose a function to the model.
+class ExternalTool {
+  ExternalTool(this.spec, this.run, {this.server = ''});
+
+  final ToolSpec spec;
+  final Future<String> Function(Map<String, dynamic> input) run;
+
+  /// MCP server name, so a reconnect can drop the previous registrations.
+  final String server;
+}
+
 /// Executes shell commands and file edits inside a private workspace, the way
 /// the desktop agent does — but scoped to the app sandbox on Android.
 class ToolBox {
@@ -155,11 +169,36 @@ class ToolBox {
   /// Extra `bin` directories contributed by installed modules.
   final List<String> extraPaths = <String>[];
 
+  /// Tools contributed by MCP servers and plugins, keyed by tool name.
+  final Map<String, ExternalTool> _external = <String, ExternalTool>{};
+
+  /// Set by AppState so the `task` tool can spawn a child agent.
+  Future<String> Function(String prompt, {String? agent})? subagent;
+
   /// Snapshot bookkeeping for "undo this turn".
   String? _turnStamp;
   final Map<String, String> _backups = <String, String>{};
 
   bool get canUndo => _backups.isNotEmpty;
+
+  List<ExternalTool> get externalTools => _external.values.toList();
+
+  void registerExternal(ExternalTool tool) {
+    _external[tool.spec.name] = tool;
+  }
+
+  /// Drops every tool that came from one server, used before reconnecting.
+  void clearExternal({String? server, String? prefix}) {
+    _external.removeWhere((String name, ExternalTool t) =>
+        (server != null && t.server == server) ||
+        (prefix != null && name.startsWith(prefix)));
+  }
+
+  /// Built-in tools plus whatever MCP/plugins registered right now.
+  List<ToolSpec> get specsAll => <ToolSpec>[
+        ...specs,
+        for (final ExternalTool t in _external.values) t.spec,
+      ];
 
   static Future<ToolBox> open() async {
     final Directory base = await getApplicationSupportDirectory();
@@ -347,6 +386,32 @@ class ToolBox {
           },
         ),
         ToolSpec(
+          'task',
+          'Delegate a self-contained sub-task to a child agent. The child has '
+              'its own context, the same workspace and tools, and returns only '
+              'a final report — use it for parallel or isolated investigations '
+              'so this conversation stays short. Optional `agent` picks a '
+              'definition from .zcode/agents.',
+          <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'description': <String, dynamic>{
+                'type': 'string',
+                'description': 'Short label shown in the transcript',
+              },
+              'prompt': <String, dynamic>{
+                'type': 'string',
+                'description': 'Full instructions for the child agent',
+              },
+              'agent': <String, dynamic>{
+                'type': 'string',
+                'description': 'Agent file name under .zcode/agents (optional)',
+              },
+            },
+            'required': <String>['description', 'prompt'],
+          },
+        ),
+        ToolSpec(
           'todo_write',
           'Publish or update the task checklist for the current turn. '
               'Call it at the start of a multi-step task and after finishing steps.',
@@ -479,7 +544,17 @@ class ToolBox {
         return _fetch(call);
       case 'todo_write':
         return _todo(call);
+      case 'task':
+        return _task(call);
       default:
+        final ExternalTool? ext = _external[call.name];
+        if (ext != null) {
+          try {
+            return _clip(await ext.run(call.input));
+          } catch (e) {
+            return 'Tool ${call.name} failed: $e';
+          }
+        }
         return 'Unknown tool: ${call.name}';
     }
   }
@@ -734,6 +809,27 @@ class ToolBox {
     }
     final int done = items.where((TodoEntry t) => t.done).length;
     return '${b.toString().trim()}\n\n$done/${items.length} completed';
+  }
+
+  Future<String> _task(ToolCall call) async {
+    final Future<String> Function(String prompt, {String? agent})? run = subagent;
+    if (run == null) {
+      return 'Sub-agents are unavailable in this build. Do the work yourself.';
+    }
+    final String prompt = '${call.input['prompt'] ?? ''}'.trim();
+    if (prompt.isEmpty) return 'Empty task prompt';
+    final String? agent = '${call.input['agent'] ?? ''}'.trim().isEmpty
+        ? null
+        : '${call.input['agent']}'.trim();
+    // Depth is capped at one: a child cannot spawn grandchildren, which keeps
+    // a confused model from fanning out without bound.
+    final Future<String> Function(String, {String? agent})? outer = subagent;
+    subagent = null;
+    try {
+      return await run(prompt, agent: agent);
+    } finally {
+      subagent = outer;
+    }
   }
 
   Future<String> _grep(ToolCall call) async {

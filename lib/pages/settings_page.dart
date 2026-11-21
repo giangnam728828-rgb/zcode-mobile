@@ -11,6 +11,7 @@ import '../services/account.dart';
 import '../state/app_state.dart';
 import 'files_page.dart';
 import 'modules_page.dart';
+import 'plugins_page.dart';
 import 'terminal_page.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -380,6 +381,29 @@ class _SettingsPageState extends State<SettingsPage> {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const ModulesPage()),
               ),
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            _navRow(
+              icon: Icons.widgets_outlined,
+              label: s.isEnglish ? 'Plugins' : '插件市场',
+              hint: <String>[
+                if (state.pluginCenter != null)
+                  '${state.pluginCenter!.installed.length} ${s.isEnglish ? 'installed' : '个已安装'}',
+                if (state.mcpToolCount > 0)
+                  'MCP ${state.mcpToolCount} ${s.isEnglish ? 'tools' : '个工具'}',
+                if (state.pluginCenter?.installed.isEmpty != false &&
+                    state.mcpToolCount == 0)
+                  (s.isEnglish
+                      ? 'Skills, commands, sub-agents and MCP — tap to install'
+                      : '技能、命令、子智能体与 MCP，点一下即可安装'),
+              ].join(' · '),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const PluginsPage()),
+                );
+                if (mounted) setState(() {});
+              },
               cs: cs,
             ),
             const Divider(height: 14),

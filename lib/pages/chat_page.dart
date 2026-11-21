@@ -14,6 +14,7 @@ import '../widgets/composer.dart';
 import '../widgets/message_bubble.dart';
 import 'files_page.dart';
 import 'modules_page.dart';
+import 'plugins_page.dart';
 import 'settings_page.dart';
 import 'terminal_page.dart';
 
@@ -171,6 +172,7 @@ class _ChatPageState extends State<ChatPage> {
           attachments: _attachments,
           quote: _quote,
           filePaths: state.fileIndex,
+          extraCommands: state.customCommands,
           onRemoveAttachment: (Attachment a) {
             setState(() => _attachments = _attachments
                 .where((Attachment x) => x.path != a.path)
@@ -394,14 +396,28 @@ class _ChatPageState extends State<ChatPage> {
       final List<String> parts = text.substring(1).split(RegExp(r'\s+'));
       final SlashCommand? cmd = findCommand(parts.first);
       if (cmd == null) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(
-            content: Text(widget.s.isEnglish
-                ? 'Unknown command: /${parts.first}'
-                : '未知命令：/${parts.first}'),
-            duration: const Duration(milliseconds: 1500),
-          ));
+        // Plugin commands expand into a normal prompt, so they run through the
+        // same path as typed text.
+        final String args = parts.skip(1).join(' ').trim();
+        final String? expanded =
+            state.customCommandPrompt(parts.first, args);
+        if (expanded == null) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(
+              content: Text(widget.s.isEnglish
+                  ? 'Unknown command: /${parts.first}'
+                  : '未知命令：/${parts.first}'),
+              duration: const Duration(milliseconds: 1500),
+            ));
+          return;
+        }
+        state.send(expanded, attachments: _attachments, quote: _quote);
+        setState(() {
+          _attachments = <Attachment>[];
+          _quote = null;
+        });
+        _scrollToBottom();
         return;
       }
       final String arg = parts.skip(1).join(' ').trim();
@@ -450,6 +466,9 @@ class _ChatPageState extends State<ChatPage> {
       case 'modules':
         await _openModules();
         break;
+      case 'plugins':
+        await _openPlugins();
+        break;
       case 'settings':
         await _openSettings();
         break;
@@ -474,7 +493,7 @@ class _ChatPageState extends State<ChatPage> {
         }
         break;
       case 'help':
-        _showHelp(en);
+        _showHelp(state, en);
         break;
     }
   }
@@ -489,7 +508,7 @@ class _ChatPageState extends State<ChatPage> {
       ));
   }
 
-  void _showHelp(bool en) {
+  void _showHelp(AppState state, bool en) {
     showModalBottomSheet<void>(
       context: context,
       builder: (BuildContext ctx) {
@@ -507,7 +526,10 @@ class _ChatPageState extends State<ChatPage> {
                       fontSize: 15, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 10),
-                for (final SlashCommand c in kSlashCommands)
+                for (final SlashCommand c in <SlashCommand>[
+                  ...kSlashCommands,
+                  ...state.customCommands,
+                ])
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 5),
                     child: Row(
@@ -569,6 +591,14 @@ class _ChatPageState extends State<ChatPage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => const TerminalPage()),
     );
+  }
+
+  Future<void> _openPlugins() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => const PluginsPage(),
+    ));
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _openModules() async {

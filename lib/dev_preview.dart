@@ -10,7 +10,9 @@ import 'models/chat_message.dart';
 import 'models/conversation.dart';
 import 'pages/home_shell.dart';
 import 'pages/modules_page.dart';
+import 'pages/plugins_page.dart';
 import 'pages/terminal_page.dart';
+import 'services/plugins.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
@@ -20,6 +22,8 @@ Widget _pageFor(String? page) {
       return const ModulesPage();
     case 'terminal':
       return const TerminalPage();
+    case 'plugins':
+      return const PluginsPage();
     default:
       return const HomeShell();
   }
@@ -30,6 +34,8 @@ void main() {
   final bool empty = Uri.base.queryParameters['empty'] == '1';
   final AppState state = AppState();
   state.config = AppConfig.empty.copyWith(model: 'glm-4.6');
+  // The web preview has no real workspace, but the market tab is pure catalog.
+  state.pluginCenter = PluginCenter(null);
   final Conversation c = Conversation(id: 'demo', title: '整理工作区并补文档');
 
   final ToolCall bash = ToolCall(

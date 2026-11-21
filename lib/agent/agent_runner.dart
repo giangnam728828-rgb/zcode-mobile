@@ -156,7 +156,7 @@ class AgentRunner {
       'temperature': temperature,
       'stream': true,
       'system': systemPrompt,
-      'tools': ToolBox.specs.map((ToolSpec t) => t.toJson()).toList(),
+      'tools': toolbox.specsAll.map((ToolSpec t) => t.toJson()).toList(),
       'messages': wire,
     });
 

@@ -33,6 +33,8 @@ const List<SlashCommand> kSlashCommands = <SlashCommand>[
   SlashCommand(name: 'terminal', usage: '/terminal', zh: '打开终端', en: 'Terminal'),
   SlashCommand(name: 'modules', usage: '/modules', zh: '扩展模块', en: 'Modules'),
   SlashCommand(
+      name: 'plugins', usage: '/plugins', zh: '插件市场', en: 'Plugins'),
+  SlashCommand(
       name: 'model',
       usage: '/model <id>',
       zh: '切换模型',

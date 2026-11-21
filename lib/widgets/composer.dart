@@ -32,6 +32,7 @@ class Composer extends StatefulWidget {
     this.onOpenTerminal,
     this.onOpenModules,
     this.filePaths = const <String>[],
+    this.extraCommands = const <SlashCommand>[],
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -52,6 +53,9 @@ class Composer extends StatefulWidget {
   final VoidCallback? onOpenTerminal;
   final VoidCallback? onOpenModules;
   final List<String> filePaths;
+
+  /// Commands contributed by installed plugins.
+  final List<SlashCommand> extraCommands;
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -127,7 +131,7 @@ class _ComposerState extends State<Composer> {
       final String body = text.substring(1);
       if (!body.contains(' ')) {
         final String q = body.toLowerCase();
-        next = kSlashCommands
+        next = <SlashCommand>[...kSlashCommands, ...widget.extraCommands]
             .where((SlashCommand c) => c.name.startsWith(q))
             .map((SlashCommand c) => _Suggestion(
                   icon: _commandIcon(c.name),
@@ -183,6 +187,8 @@ class _ComposerState extends State<Composer> {
         return Icons.terminal_rounded;
       case 'modules':
         return Icons.extension_outlined;
+      case 'plugins':
+        return Icons.widgets_outlined;
       case 'model':
         return Icons.memory_rounded;
       case 'settings':

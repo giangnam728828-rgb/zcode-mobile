@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../agent/agent_runner.dart';
+import '../agent/commands.dart';
+import '../agent/mcp.dart';
 import '../agent/tools.dart';
 import '../models/app_config.dart';
 import '../models/attachment.dart';
@@ -12,6 +14,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../services/account.dart';
 import '../services/modules.dart';
+import '../services/plugins.dart';
 import '../services/store.dart';
 
 /// Single source of truth for the signed-in account, conversations and the
@@ -37,7 +40,18 @@ class AppState extends ChangeNotifier {
   ToolCall? pendingApproval;
 
   ModuleCenter? moduleCenter;
+  PluginCenter? pluginCenter;
+  McpManager? mcpManager;
   List<String> fileIndex = <String>[];
+
+  /// Commands contributed by installed plugins (`.zcode/commands/*.md`).
+  List<SlashCommand> customCommands = const <SlashCommand>[];
+
+  /// Sub-agent names found in `.zcode/agents`.
+  List<String> agentNames = const <String>[];
+
+  /// How many MCP tools are currently registered, shown in the settings card.
+  int mcpToolCount = 0;
 
   final AccountService _account = AccountService();
   ToolBox? _toolbox;
@@ -61,6 +75,14 @@ class AppState extends ChangeNotifier {
     moduleCenter = ModuleCenter(_toolbox!.workspace);
     await moduleCenter!.load();
     _applyModulePaths();
+    pluginCenter = PluginCenter(_toolbox!.workspace);
+    await pluginCenter!.load();
+    mcpManager = McpManager(_toolbox!.workspace, _toolbox!);
+    _toolbox!.subagent = _runSubagent;
+    pluginCenter!.onChanged = (bool mcpChanged) =>
+        unawaited(_reloadExtensions(mcpChanged: mcpChanged));
+    await _loadCustomCommands();
+    unawaited(_connectMcp());
     final List<Conversation> loaded = await Store.loadConversations();
     conversations
       ..clear()
@@ -97,6 +119,10 @@ class AppState extends ChangeNotifier {
     _toolbox = box;
     notifyListeners();
   }
+
+  /// Test hook: re-read plugin commands without booting the whole app.
+  @visibleForTesting
+  Future<void> debugReloadExtensions() => _loadCustomCommands();
 
   Directory? get workspace => _toolbox?.workspace;
 
@@ -462,11 +488,19 @@ class AppState extends ChangeNotifier {
         out.writeln(rows.join('\n'));
       }
     }
+    if (agentNames.isNotEmpty) {
+      out.writeln('\n## Sub-agents');
+      out.writeln('Pass one of these names as `agent` when calling task:');
+      out.writeln(agentNames.map((String a) => '- $a').join('\n'));
+    }
     return out.toString().trim();
   }
 
   Future<String> _systemPrompt(AppConfig cfg) async {
     final String ws = _toolbox?.workspace.path ?? '(unavailable)';
+    final String cmds = customCommands.isEmpty
+        ? ''
+        : customCommands.map((SlashCommand c) => '/${c.name}').join(', ');
     final String mods = moduleCenter?.installed.isNotEmpty == true
         ? moduleCenter!.installed
             .map((InstalledModule m) => m.commands.join(', '))
@@ -478,10 +512,14 @@ class AppState extends ChangeNotifier {
         'is $ws and every file tool is sandboxed to it.\n'
         'Available tools: bash (sh + toybox, PATH already includes module bins), '
         'read_file, write_file, edit_file, list_dir, glob, grep, make_dir, '
-        'move_file, delete_file, web_fetch, todo_write.\n'
+        'move_file, delete_file, web_fetch, todo_write'
+        '${agentNames.isEmpty ? '' : ', task'}'
+        '${mcpToolCount == 0 ? '' : ', plus $mcpToolCount MCP tools named mcp__<server>__<tool>'}.\n'
         'Installed CLI modules: $mods. If a missing runtime (node, python, git) '
         'blocks the task, say so and suggest installing a module instead of '
         'pretending it worked.\n'
+        '${agentNames.isEmpty ? '' : 'Sub-agents you can pass to task: ${agentNames.join(', ')}.\n'}'
+        '${cmds.isEmpty ? '' : 'Plugin commands the user has: $cmds.\n'}'
         'Working rules:\n'
         '- For anything with more than two steps, call todo_write first and keep '
         'it updated as you go.\n'
@@ -936,6 +974,172 @@ class AppState extends ChangeNotifier {
   }
 
   // -------------------------------------------------------------------- files
+
+  // -------------------------------------------------------------- extensions
+
+  /// Re-reads plugin-provided commands and agents, then reconnects MCP. Called
+  /// after an install so the next message already sees the new tools.
+  Future<void> _reloadExtensions({bool mcpChanged = true}) async {
+    await _loadCustomCommands();
+    if (mcpChanged) await _connectMcp();
+    notifyListeners();
+  }
+
+  Future<void> _connectMcp() async {
+    final McpManager? m = mcpManager;
+    if (m == null) return;
+    try {
+      mcpToolCount = await m.reload();
+    } catch (e) {
+      mcpToolCount = 0;
+      m.error = '$e';
+    }
+    notifyListeners();
+  }
+
+  /// Reconnects MCP servers after the user edits mcp.json.
+  Future<void> reloadMcp() => _connectMcp();
+
+  /// Re-reads commands/agents after a plugin file was edited by hand.
+  Future<void> refreshPlugins() => _reloadExtensions(mcpChanged: false);
+
+  Future<void> _loadCustomCommands() async {
+    final ToolBox? box = _toolbox;
+    if (box == null) return;
+    final List<SlashCommand> cmds = <SlashCommand>[];
+    try {
+      final Directory dir = Directory(box.resolvePath('.zcode/commands'));
+      if (await dir.exists()) {
+        await for (final FileSystemEntity e in dir.list()) {
+          if (e is! File || !e.path.endsWith('.md')) continue;
+          try {
+            final String raw = await e.readAsString();
+            final Map<String, String> meta = _frontMatter(raw);
+            final String id = e.path.split('/').last.replaceAll('.md', '');
+            final String name = (meta['name'] ?? id).trim();
+            if (name.isEmpty) continue;
+            cmds.add(SlashCommand(
+              name: name,
+              usage: meta['usage'] ?? '/$name',
+              zh: meta['description'] ?? '插件命令',
+              en: meta['description'] ?? 'Plugin command',
+              takesArg: (raw.contains(r'$ARGUMENTS') || raw.contains('{{args}}')),
+            ));
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    cmds.sort((SlashCommand a, SlashCommand b) => a.name.compareTo(b.name));
+    customCommands = cmds;
+
+    final List<String> agents = <String>[];
+    try {
+      final Directory dir = Directory(box.resolvePath('.zcode/agents'));
+      if (await dir.exists()) {
+        await for (final FileSystemEntity e in dir.list()) {
+          if (e is File && e.path.endsWith('.md')) {
+            agents.add(e.path.split('/').last.replaceAll('.md', ''));
+          }
+        }
+      }
+    } catch (_) {}
+    agents.sort();
+    agentNames = agents;
+  }
+
+  /// Expands a plugin command into the prompt it stands for, or null when the
+  /// name does not belong to a plugin.
+  String? customCommandPrompt(String name, String args) {
+    final ToolBox? box = _toolbox;
+    if (box == null) return null;
+    final File f = File(box.resolvePath('.zcode/commands/$name.md'));
+    if (!f.existsSync()) return null;
+    try {
+      final String raw = f.readAsStringSync();
+      final String body = _stripFrontMatter(raw);
+      return body
+          .replaceAll(r'$ARGUMENTS', args)
+          .replaceAll('{{args}}', args)
+          .trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, String> _frontMatter(String raw) {
+    final Map<String, String> out = <String, String>{};
+    final List<String> lines = raw.split('\n');
+    if (lines.isEmpty || lines.first.trim() != '---') return out;
+    for (int i = 1; i < lines.length; i++) {
+      final String line = lines[i];
+      if (line.trim() == '---') break;
+      final int colon = line.indexOf(':');
+      if (colon <= 0) continue;
+      out[line.substring(0, colon).trim()] = line.substring(colon + 1).trim();
+    }
+    return out;
+  }
+
+  static String _stripFrontMatter(String raw) {
+    final List<String> lines = raw.split('\n');
+    if (lines.isEmpty || lines.first.trim() != '---') return raw;
+    for (int i = 1; i < lines.length; i++) {
+      if (lines[i].trim() == '---') return lines.skip(i + 1).join('\n').trim();
+    }
+    return raw;
+  }
+
+  /// Runs a child agent on behalf of the `task` tool. The child gets the same
+  /// workspace and tools but its own transcript, and only its final text comes
+  /// back — that is what keeps a long investigation out of the main context.
+  Future<String> _runSubagent(String prompt, {String? agent}) async {
+    final ToolBox? box = _toolbox;
+    final AppConfig? cfg = config;
+    final AccountSession? s = session;
+    if (box == null || cfg == null || s == null) {
+      return 'Sub-agent unavailable: the session is not ready.';
+    }
+    String persona = '';
+    if (agent != null && agent.trim().isNotEmpty) {
+      final File f = File(box.resolvePath('.zcode/agents/${agent.trim()}.md'));
+      if (await f.exists()) persona = _stripFrontMatter(await f.readAsString());
+    }
+    final StringBuffer out = StringBuffer();
+    final Future<String> Function(String, {String? agent})? parent = box.subagent;
+    // No nested task calls: keeps depth at one and avoids runaway fan-out.
+    box.subagent = null;
+    try {
+      final AgentRunner runner = AgentRunner(
+        baseUrl: cfg.baseUrl,
+        token: s.projectToken,
+        model: cfg.model,
+        toolbox: box,
+        maxTokens: cfg.maxTokens,
+        maxSteps: 10,
+        temperature: cfg.temperature,
+      );
+      await runner.run(
+        wire: <Map<String, dynamic>>[
+          <String, dynamic>{'role': 'user', 'content': prompt},
+        ],
+        systemPrompt: '${await _systemPrompt(cfg)}\n\n'
+            '## 当前角色\n'
+            '${persona.isEmpty ? '你是主智能体派出的子智能体。只完成交给你的这一件事，'
+                '然后给出结论，不要寒暄。' : persona}',
+        onText: (String t) => out.write(t),
+        onThinking: (String t) {},
+        onToolStart: (ToolCall c) {},
+        onToolUpdate: (ToolCall c) {},
+        approve: (ToolCall c) => _approve(c),
+      );
+    } catch (e) {
+      return 'Sub-agent failed: $e';
+    } finally {
+      box.subagent = parent;
+    }
+    final String text = out.toString().trim();
+    return text.isEmpty ? 'Sub-agent finished without a report.' : text;
+  }
 
   Future<void> refreshFileIndex() async {
     final ToolBox? box = _toolbox;

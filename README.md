@@ -36,7 +36,7 @@
 
 ## Agent：真的会在手机上干活
 
-内置 12 个工具，走 Anthropic 兼容的 `tool_use` / `tool_result` 循环：
+内置 13 个工具，走 Anthropic 兼容的 `tool_use` / `tool_result` 循环；装插件后还会多出 MCP 工具：
 
 | 工具 | 能力 |
 |---|---|
@@ -52,6 +52,7 @@
 | `delete_file` | 删除文件；非空目录需显式 `recursive` |
 | `web_fetch` | 抓 http(s) 页面/接口，HTML 转可读文本 |
 | `todo_write` | 发布任务清单，手机上直接渲染成带进度的计划卡 |
+| `task` | 把独立子任务交给子智能体，它用自己的上下文干活，只回传结论 |
 
 安全与掌控：
 
@@ -76,7 +77,9 @@
 | 项目规则 `AGENTS.md`、`.zcode/skills` | ✅ 每轮自动注入 |
 | 上下文压缩 | ✅ 自动 + `/compact`，摘要可见可清 |
 | 回合撤销 | ✅ 文件级快照 |
-| MCP / 子智能体 / 桌面级插件 | ⏳ 见路线图 |
+| MCP 服务 | ✅ HTTP / stdio，工具自动注入 |
+| 子智能体 | ✅ `task` 工具 + `.zcode/agents` |
+| 插件市场 | ✅ 16 款内置，支持从链接装 |
 | Node / Python / git 运行时 | ⏳ 用扩展模块或自带静态二进制 |
 
 ## 手机端交互
@@ -88,7 +91,59 @@
 - **用量**：每条回答下方显示 in/out token，顶部显示当前上下文估算；上下文过长会自动折叠早期消息；
 - **流畅度**：流式文本按 16ms 合帧、完成后一次性走 Markdown、消息级缓存 + `RepaintBoundary`，滚动不抖。
 
-命令：`/new` `/clear` `/compact` `/undo` `/model` `/files` `/terminal` `/modules` `/export` `/settings` `/help`。
+命令：`/new` `/clear` `/compact` `/undo` `/model` `/files` `/terminal` `/modules` `/plugins` `/export` `/settings` `/help`，外加插件提供的命令。
+
+## 插件：下载即用
+
+和桌面端一样，手机版把「扩展」做成内容而不是代码：装插件就是往工作区写文件，下一轮对话立刻生效，不需要重新打 APK。
+
+打开 **设置 → 插件市场**（或 `/plugins`），16 款内置插件离线可装：
+
+| 类型 | 内置示例 | 安装后 |
+|---|---|---|
+| 技能 | 代码评审、Android Shell、联网调研、安全自查、移动端 UI | 写入 `.zcode/skills/`，自动出现在系统提示里 |
+| 命令 | `/commit`、`/explain` | 写入 `.zcode/commands/`，输入 `/` 直接看到 |
+| 子智能体 | 缺陷猎手、测试编写、重构助手、文档撰写 | 写入 `.zcode/agents/`，`task` 工具按名调用 |
+| 资源包 | 网页起手模板、Python 小工具箱 | 文件落到工作区，改完就能跑 |
+| MCP | 接入示例 | 合并进 `.zcode/mcp.json`，自动重连 |
+
+也可以在插件页右上角「从链接安装」：填一个 JSON 清单地址即可，支持：
+
+```json
+{
+  "plugins": [
+    {
+      "id": "my-skill",
+      "name": "我的技能",
+      "kind": "skill",
+      "files": [{ "path": "skills/my.md", "content": "# 规则…" }]
+    }
+  ]
+}
+```
+
+单个对象、数组、`{"plugins": […]}` 三种写法都能解析。写入路径被限制在 `.zcode/{skills,commands,agents,plugins}/` 下，`..` 与绝对路径会被丢弃（有测试覆盖）。卸载时它写过的文件一并删除，停用则只摘掉 MCP 注册。
+
+## MCP：把别的应用变成工具
+
+`设置 → 插件 → MCP 服务` 里可以直接编辑 `.zcode/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "url": "https://your-host/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    },
+    "local-tool": {
+      "command": "/path/to/server",
+      "args": ["--stdio"]
+    }
+  }
+}
+```
+
+保存后点「重新连接」，服务暴露的工具会以 `mcp__服务器名__工具名` 出现在智能体手里，卡片上的名称也带 `MCP:` 前缀，一眼能看出调用来源。远程走 Streamable HTTP（支持 SSE 响应与 session），本地走 stdio；连不上的服务只会在列表里标红，不会拖慢对话。
 
 ## 扩展模块
 
@@ -134,13 +189,16 @@ CI **只在打 tag 或手动触发时构建**（`workflow_dispatch`），日常 
 lib/
   services/account.dart     OAuth 登录、Project Token 签发与续期、Keystore 存储
   services/modules.dart     扩展模块目录、下载解压、PATH 注入
-  agent/tools.dart          工作区沙箱、12 个工具、回合快照
+  services/plugins.dart     插件市场、清单解析、安装/卸载、内置 16 款
+  agent/tools.dart          工作区沙箱、13 个工具、外部工具注册、回合快照
+  agent/mcp.dart            MCP 客户端（HTTP/stdio）、连接与工具注入
   agent/agent_runner.dart   流式 tool_use 循环、审批、usage、断线重试
   agent/commands.dart       斜杠命令定义
   state/app_state.dart      会话、回合、队列、压缩、撤销、附件
   pages/files_page.dart     文件浏览 + 编辑器 + 图片预览
   pages/terminal_page.dart  终端
   pages/modules_page.dart   扩展模块管理
+  pages/plugins_page.dart   插件市场 / 已安装 / MCP 三栏
   widgets/composer.dart     命令/文件补全、附件、引用、队列
   widgets/tool_card.dart    工具卡与计划卡
 docs/RESEARCH.md            12 个同类项目的对比与取舍
@@ -151,13 +209,19 @@ lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口
 ## 已验证
 
 - `flutter analyze` → **No issues found**
-- `flutter test` → **22/22 通过**，覆盖：
+- `flutter test` → **34/34 通过**，覆盖：
   - 假模型服务端跑通完整闭环：`bash` 真执行、`tool_result` 回传、拒绝审批不落盘、越权路径被拦；
   - `glob` / `grep` / `mkdir` / `move` / `delete` / `todo_write` 的行为；
   - 回合快照：新建文件被删、改过的文件内容还原；
   - 内置模块安装后脚本落盘、重启后仍注册、卸载清理；
   - 输入框的 `/` 命令与 `@` 文件补全；
-  - 计划卡渲染。
+  - 计划卡渲染；
+  - 插件安装/卸载、越权路径丢弃、MCP 合并与撤销；
+  - 远程清单拉取（本地 HTTP 服务模拟 `{"plugins": […]}`）；
+  - MCP HTTP 客户端握手、`tools/list`、`tools/call`，SSE 响应解包；
+  - MCP 工具以 `mcp__server__tool` 注册进工具链并可执行，重连不重复注册；
+  - 子智能体只能派发一层；
+  - 插件页点「安装」后文件落盘、按钮变「已安装」。
 
 ## 路线图
 
