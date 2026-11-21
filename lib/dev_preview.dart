@@ -11,7 +11,9 @@ import 'models/conversation.dart';
 import 'pages/home_shell.dart';
 import 'pages/modules_page.dart';
 import 'pages/plugins_page.dart';
+import 'pages/settings_page.dart';
 import 'pages/terminal_page.dart';
+import 'pages/workspace_picker_page.dart';
 import 'services/plugins.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
@@ -24,6 +26,10 @@ Widget _pageFor(String? page) {
       return const TerminalPage();
     case 'plugins':
       return const PluginsPage();
+    case 'settings':
+      return const SettingsPage();
+    case 'workspace':
+      return const WorkspacePickerPage();
     default:
       return const HomeShell();
   }

@@ -7,7 +7,10 @@ import 'package:provider/provider.dart';
 import '../agent/tools.dart';
 import '../l10n/strings.dart';
 import '../models/attachment.dart';
+import '../platform/device_bridge.dart';
+import '../services/workspace.dart';
 import '../state/app_state.dart';
+import 'workspace_picker_page.dart';
 
 /// Workspace browser: the phone-side equivalent of the desktop file tree.
 /// Files can be created, renamed, deleted, edited and referenced in chat.
@@ -24,6 +27,7 @@ class _FilesPageState extends State<FilesPage> {
   bool _loading = true;
   bool _showHidden = false;
   String? _error;
+  int _epoch = -1;
 
   AppState get _state => context.read<AppState>();
 
@@ -68,12 +72,36 @@ class _FilesPageState extends State<FilesPage> {
 
   String get _displayPath => _path.isEmpty ? '/' : '/$_path';
 
+  String get _absolute => _state.tools?.resolvePath(_path) ?? _path;
+
+  Future<void> _changeWorkspace() async {
+    final bool? changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => WorkspacePickerPage(initialPath: _state.workspacePath),
+      ),
+    );
+    if (changed == true && mounted) {
+      setState(() => _path = '');
+      await _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final S s = S.of(context.watch<AppState>().config?.language);
+    final AppState app = context.watch<AppState>();
+    final S s = S.of(app.config?.language);
     final bool en = s.isEnglish;
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
+
+    // A workspace switch invalidates every relative path on screen.
+    if (_epoch != app.workspaceEpoch) {
+      _epoch = app.workspaceEpoch;
+      if (_path.isNotEmpty) {
+        _path = '';
+        WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -82,11 +110,11 @@ class _FilesPageState extends State<FilesPage> {
           children: <Widget>[
             Text(en ? 'Workspace' : '工作区文件'),
             Text(
-              _displayPath,
+              '${WorkspaceResolver.label(_absolute)}  ·  $_displayPath',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w400,
                 color: cs.onSurface.withOpacity(0.42),
               ),
@@ -94,6 +122,23 @@ class _FilesPageState extends State<FilesPage> {
           ],
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: en ? 'Switch workspace folder' : '切换工作区文件夹',
+            icon: const Icon(Icons.drive_folder_upload_outlined, size: 20),
+            onPressed: _changeWorkspace,
+          ),
+          IconButton(
+            tooltip: en ? 'Open with another app' : '用其他应用打开',
+            icon: const Icon(Icons.open_in_new_rounded, size: 19),
+            onPressed: () async {
+              final bool ok = await DeviceBridge.openPath(_absolute);
+              if (!ok && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(en ? 'No app can open it' : '没有可打开它的应用')),
+                );
+              }
+            },
+          ),
           IconButton(
             tooltip: en ? 'Hidden files' : '显示隐藏文件',
             icon: Icon(
@@ -122,6 +167,8 @@ class _FilesPageState extends State<FilesPage> {
       body: Column(
         children: <Widget>[
           _breadcrumb(cs, en),
+          if (DeviceBridge.isAndroid && !app.storageAccess)
+            _storageBanner(cs, en),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -137,6 +184,38 @@ class _FilesPageState extends State<FilesPage> {
                           ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _storageBanner(ColorScheme cs, bool en) {
+    return InkWell(
+      onTap: _changeWorkspace,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+        color: cs.primary.withOpacity(0.07),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.folder_special_outlined, size: 15, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                en
+                    ? 'Only the private folder is visible. Grant file access to '
+                        'open your own folders.'
+                    : '现在只能看到应用私有目录。授予文件权限后就能打开手机上的文件夹。',
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  color: cs.primary.withOpacity(0.9),
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 16, color: cs.primary.withOpacity(0.6)),
+          ],
+        ),
       ),
     );
   }

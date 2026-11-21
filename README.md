@@ -34,13 +34,41 @@
 - Project Token 过期前自动续签，长会话不会中途断；
 - 回调走本机 `127.0.0.1` 随机端口，不需要扫码、不需要填远程链接、不依赖电脑开机。
 
+## 工作区：就是你手机上的那个文件夹
+
+桌面版让你 `cd` 进项目；手机版也一样，只是这个目录由你在手机上挑。
+
+**设置 → 工作区文件夹** 打开目录浏览器：内部存储、SD 卡、`Download`、`Documents` 都在里面，可以逐级进入、新建文件夹，也可以直接输路径。选中之后：
+
+- 文件管理器、相册、其他 App 打开的就是同一批文件，卸载 App 也不会删掉你的项目；
+- 终端和智能体用的都是这个绝对路径，没有「虚拟文件系统」这层；
+- 每个项目一个工作区，随时在设置里切换，最近的 8 个会记住。
+
+首次使用会提示授予**所有文件访问权限**（Android 11+ 的系统叫法；10 及以下为存储权限）。没有它，App 只能看到自己的私有目录。授权入口就在选择页顶部，点「去授权」跳到系统设置，回来会自动重新检测。
+
+工作区里会自动建好这些：
+
+```
+<你的文件夹>/
+  README.md              首次创建时的说明
+  .zcode/bin/            放你自己的脚本，终端里按名字就能调用
+  .zcode/skills/         技能（装插件时写入）
+  .zcode/commands/       自定义斜杠命令
+  .zcode/agents/         子智能体人设
+  .zcode/modules/        扩展模块
+  .zcode/backups/        回合快照，供 /undo 还原
+  .tmp/                  命令临时目录
+```
+
+路径规则：相对路径以工作区为根；绝对路径在获得文件权限后可以读写 `/storage/**`（手机上的其他文件夹），其余系统目录仍会被拒绝——`..` 也不能穿出去，这部分有测试覆盖。
+
 ## Agent：真的会在手机上干活
 
 内置 13 个工具，走 Anthropic 兼容的 `tool_use` / `tool_result` 循环；装插件后还会多出 MCP 工具：
 
 | 工具 | 能力 |
 |---|---|
-| `bash` | `sh` + toybox：ls / cat / grep / sed / find / tar…，可跑脚本；PATH 自动带上已装模块 |
+| `bash` | `sh` + toybox：ls / cat / grep / sed / find / tar…，可跑脚本；支持 `cwd`，PATH 依次为 `.zcode/bin` → 模块 → 系统 |
 | `read_file` | 按行读取，带 offset / limit，二进制与超大文件会被拦下 |
 | `write_file` | 新建或覆盖（自动建目录），写前自动做快照 |
 | `edit_file` | 精确替换一段内容，重复匹配会拒绝 |
@@ -56,7 +84,7 @@
 
 安全与掌控：
 
-- 工作区固定在应用私有目录（`/data/data/ai.zcode.zcode_mobile/files/workspace`），`..` 越权路径会被规范化后拒绝（有测试覆盖）；
+- 工作区是你在手机上选的文件夹（默认 `内部存储/ZCode`），不是沙箱副本；`..` 越权路径会被规范化后拒绝，绝对路径仅在授权后放行 `/storage/**`（有测试覆盖）；
 - **审批三档**：`risky`（默认，删除 / 移动 / 破坏性 shell 才问）、`ask`（每个工具都问）、`auto`（全放开）；
 - 审批弹窗显示完整命令或 diff 行数，拒绝后模型收到 denied，不会偷偷执行；
 - **回合撤销**：写文件前自动快照，`/undo` 或菜单「撤销本轮改动」可把整轮改动还原（新建的文件会被删掉）；
@@ -73,14 +101,15 @@
 | 读写文件 / shell / 搜索 / 抓网页 | ✅ 13 个工具 |
 | 计划清单（todo） | ✅ 计划卡实时打勾 |
 | 文件树与编辑器 | ✅ 新建 / 重命名 / 删除 / 预览图片 |
-| 终端 | ✅ 独立终端页，与 Agent 同一 PATH |
+| 终端 | ✅ 独立终端页，与 Agent 同一 PATH，支持 `cd` |
 | 项目规则 `AGENTS.md`、`.zcode/skills` | ✅ 每轮自动注入 |
 | 上下文压缩 | ✅ 自动 + `/compact`，摘要可见可清 |
 | 回合撤销 | ✅ 文件级快照 |
 | MCP 服务 | ✅ HTTP / stdio，工具自动注入 |
 | 子智能体 | ✅ `task` 工具 + `.zcode/agents` |
 | 插件市场 | ✅ 16 款内置，支持从链接装 |
-| Node / Python / git 运行时 | ⏳ 用扩展模块或自带静态二进制 |
+| 工作区位置 | ✅ 手机真实文件夹，可随时切换 |
+| Node / Python / git 运行时 | ✅ Termux 桥：同一目录，完整工具链 |
 
 ## 手机端交互
 
@@ -92,6 +121,30 @@
 - **流畅度**：流式文本按 16ms 合帧、完成后一次性走 Markdown、消息级缓存 + `RepaintBoundary`，滚动不抖。
 
 命令：`/new` `/clear` `/compact` `/undo` `/model` `/files` `/terminal` `/modules` `/plugins` `/export` `/settings` `/help`，外加插件提供的命令。
+
+## 在手机上真的跑命令
+
+终端页有两种执行方式，右下角切换到哪一种就用哪一种：
+
+| 模式 | 跑什么 | 说明 |
+|---|---|---|
+| 内置 sh（默认） | `sh` + toybox + `.zcode/bin` + 已装模块 | 秒开，不依赖外部 App |
+| Termux 模式 | node、python、git、npm、pip、cargo… | 命令交给 Termux 执行，输出回传到终端 |
+
+为什么 node/python 要走 Termux：Android 10 起禁止从「应用可写目录」执行二进制（W^X），自带一个 150MB 的运行时也跑不起来。Termux 有自己的 prefix，是官方允许的路子，而且和 ZCode 共享同一个工作区文件夹——所以 `npm run build` 的结果，在 ZCode 的文件页里立刻能看到。
+
+准备一次即可：
+
+```bash
+# 在 Termux 里
+pkg install nodejs python git
+echo "allow-external-apps=true" >> ~/.termux/termux.properties
+termux-reload-settings
+```
+
+之后在终端页点亮右上角的闪电图标，`git status`、`node -v`、`python main.py` 都能直接跑。工作区若在应用私有目录（Termux 访问不到），会明确提示你切到内部存储。
+
+脚本放 `.zcode/bin` 后可以直接按名字调用，但有一点要注意：Android 把 `/sdcard` 以 **noexec** 挂载，里面的 `.sh` 不一定能直接执行。用 `sh .zcode/bin/foo.sh` 最稳；命令返回 126/127 时工具输出里也会给出这个提示。
 
 ## 插件：下载即用
 
@@ -194,8 +247,11 @@ lib/
   agent/mcp.dart            MCP 客户端（HTTP/stdio）、连接与工具注入
   agent/agent_runner.dart   流式 tool_use 循环、审批、usage、断线重试
   agent/commands.dart       斜杠命令定义
-  state/app_state.dart      会话、回合、队列、压缩、撤销、附件
+  platform/device_bridge.dart 存储权限、卷、Termux 桥（MethodChannel）
+  services/workspace.dart   工作区定位、校验、初始化目录结构
+  state/app_state.dart      会话、回合、队列、压缩、撤销、附件、工作区切换
   pages/files_page.dart     文件浏览 + 编辑器 + 图片预览
+  pages/workspace_picker_page.dart 手机上选目录（含权限引导）
   pages/terminal_page.dart  终端
   pages/modules_page.dart   扩展模块管理
   pages/plugins_page.dart   插件市场 / 已安装 / MCP 三栏
@@ -209,7 +265,7 @@ lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口
 ## 已验证
 
 - `flutter analyze` → **No issues found**
-- `flutter test` → **34/34 通过**，覆盖：
+- `flutter test` → **47/47 通过**，覆盖：
   - 假模型服务端跑通完整闭环：`bash` 真执行、`tool_result` 回传、拒绝审批不落盘、越权路径被拦；
   - `glob` / `grep` / `mkdir` / `move` / `delete` / `todo_write` 的行为；
   - 回合快照：新建文件被删、改过的文件内容还原；
@@ -221,12 +277,12 @@ lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口
   - MCP HTTP 客户端握手、`tools/list`、`tools/call`，SSE 响应解包；
   - MCP 工具以 `mcp__server__tool` 注册进工具链并可执行，重连不重复注册；
   - 子智能体只能派发一层；
-  - 插件页点「安装」后文件落盘、按钮变「已安装」。
+  - 插件页点「安装」后文件落盘、按钮变「已安装」；
+  - 工作区：路径归一化、「内部存储」标签、不可写目录被拒、切换后工具链指向新目录、`.zcode/bin` 领先 PATH、沙箱与 `/storage/**` 的放行边界。
 
 ## 路线图
 
-- [ ] 运行时模块：按 ABI 下载 node / python / git 的静态构建（目前用扩展模块补 shell 工具）
-- [ ] MCP（HTTP / stdio）与项目级工具注册
+- [ ] 内置静态运行时（不依赖 Termux 也能跑 node / python）
 - [ ] 语音输入与图片 OCR
 - [ ] 屏幕操作（无障碍 / 虚拟显示）
 

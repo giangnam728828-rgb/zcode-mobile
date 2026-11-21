@@ -7,12 +7,15 @@ import 'package:provider/provider.dart';
 import '../app_info.dart';
 import '../l10n/strings.dart';
 import '../models/app_config.dart';
+import '../platform/device_bridge.dart';
 import '../services/account.dart';
+import '../services/workspace.dart';
 import '../state/app_state.dart';
 import 'files_page.dart';
 import 'modules_page.dart';
 import 'plugins_page.dart';
 import 'terminal_page.dart';
+import 'workspace_picker_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -349,6 +352,35 @@ class _SettingsPageState extends State<SettingsPage> {
           _section(s.isEnglish ? 'Workspace' : '工作区', cs),
           _card(<Widget>[
             _navRow(
+              icon: Icons.smartphone_rounded,
+              label: s.isEnglish ? 'Workspace folder' : '工作区文件夹',
+              hint: <String>[
+                state.workspacePath.isEmpty
+                    ? '—'
+                    : WorkspaceResolver.label(state.workspacePath),
+                if (DeviceBridge.isAndroid && !state.storageAccess)
+                  (s.isEnglish ? 'file access not granted' : '未授予文件访问')
+                else if (DeviceBridge.isAndroid &&
+                    !WorkspaceResolver.isShared(state.workspacePath))
+                  (s.isEnglish
+                      ? 'still private — tap to move to Internal storage'
+                      : '仍在私有目录，点一下换到内部存储'),
+                if (state.termuxAvailable)
+                  (s.isEnglish ? 'Termux ready' : 'Termux 可用'),
+              ].join(' · '),
+              onTap: () async {
+                final bool? changed = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute<bool>(
+                    builder: (_) =>
+                        WorkspacePickerPage(initialPath: state.workspacePath),
+                  ),
+                );
+                if (mounted && changed == true) setState(() {});
+              },
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            _navRow(
               icon: Icons.folder_open_rounded,
               label: s.isEnglish ? 'Files' : '文件管理',
               hint: s.isEnglish
@@ -422,15 +454,33 @@ class _SettingsPageState extends State<SettingsPage> {
               cs: cs,
             ),
             const Divider(height: 14),
-            Text(
-              state.workspacePath.isEmpty
-                  ? '—'
-                  : state.workspacePath,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontFamily: 'monospace',
-                color: cs.onSurface.withOpacity(0.38),
-              ),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    state.workspacePath.isEmpty ? '—' : state.workspacePath,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontFamily: 'monospace',
+                      color: cs.onSurface.withOpacity(0.38),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  DeviceBridge.isAndroid
+                      ? (state.storageAccess
+                          ? (s.isEnglish ? 'real files' : '手机真实文件')
+                          : (s.isEnglish ? 'private dir' : '私有目录'))
+                      : (s.isEnglish ? 'sandbox' : '沙箱'),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: cs.onSurface.withOpacity(0.3),
+                  ),
+                ),
+              ],
             ),
           ]),
           const SizedBox(height: 18),

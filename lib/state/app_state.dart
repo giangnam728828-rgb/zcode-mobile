@@ -12,10 +12,12 @@ import '../models/app_config.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+import '../platform/device_bridge.dart';
 import '../services/account.dart';
 import '../services/modules.dart';
 import '../services/plugins.dart';
 import '../services/store.dart';
+import '../services/workspace.dart';
 
 /// Single source of truth for the signed-in account, conversations and the
 /// live agent turn.
@@ -44,6 +46,19 @@ class AppState extends ChangeNotifier {
   McpManager? mcpManager;
   List<String> fileIndex = <String>[];
 
+  /// Absolute path of the folder the agent works in. On a phone this is a real
+  /// folder the user picked from their own storage.
+  String _workspacePath = '';
+
+  /// Whether the app can touch arbitrary user folders (All-files access).
+  bool storageAccess = false;
+
+  /// Whether Termux is installed, i.e. whether node/python/git can run.
+  bool termuxAvailable = false;
+
+  /// Bumped on every workspace switch so open browsers can reset their state.
+  int workspaceEpoch = 0;
+
   /// Commands contributed by installed plugins (`.zcode/commands/*.md`).
   List<SlashCommand> customCommands = const <SlashCommand>[];
 
@@ -71,18 +86,14 @@ class AppState extends ChangeNotifier {
   Future<void> init() async {
     config = await Store.loadConfig() ?? AppConfig.empty;
     session = await _account.restore();
-    _toolbox = await ToolBox.open();
-    moduleCenter = ModuleCenter(_toolbox!.workspace);
-    await moduleCenter!.load();
-    _applyModulePaths();
-    pluginCenter = PluginCenter(_toolbox!.workspace);
-    await pluginCenter!.load();
-    mcpManager = McpManager(_toolbox!.workspace, _toolbox!);
-    _toolbox!.subagent = _runSubagent;
-    pluginCenter!.onChanged = (bool mcpChanged) =>
-        unawaited(_reloadExtensions(mcpChanged: mcpChanged));
-    await _loadCustomCommands();
-    unawaited(_connectMcp());
+    await DeviceBridge.refresh();
+    storageAccess = DeviceBridge.info.storageAccess;
+    termuxAvailable = DeviceBridge.info.termux;
+    final String wsPath = await _resolveInitialWorkspace();
+    await WorkspaceResolver.bootstrap(wsPath);
+    _toolbox = await ToolBox.openAt(wsPath);
+    _workspacePath = wsPath;
+    await _bindExtensions();
     final List<Conversation> loaded = await Store.loadConversations();
     conversations
       ..clear()
@@ -96,6 +107,66 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     unawaited(refreshFileIndex());
   }
+
+  /// First run: suggest `Internal storage/ZCode`, but honour whatever the user
+  /// picked last time even if the app was killed.
+  Future<String> _resolveInitialWorkspace() async {
+    final String? saved = await Store.loadWorkspace();
+    if (saved != null && await WorkspaceResolver.ensureWritable(saved)) {
+      return saved;
+    }
+    final String suggestion = await WorkspaceResolver.suggest();
+    await Store.saveWorkspace(suggestion);
+    return suggestion;
+  }
+
+  /// Wires the workspace-dependent services (modules, plugins, MCP, custom
+  /// commands) to [ToolBox]. Also used after switching folders.
+  Future<void> _bindExtensions() async {
+    final ToolBox box = _toolbox!;
+    box.subagent = _runSubagent;
+    moduleCenter = ModuleCenter(box.workspace);
+    await moduleCenter!.load();
+    _applyModulePaths();
+    pluginCenter = PluginCenter(box.workspace);
+    await pluginCenter!.load();
+    pluginCenter!.onChanged = (bool mcpChanged) =>
+        unawaited(_reloadExtensions(mcpChanged: mcpChanged));
+    mcpManager = McpManager(box.workspace, box);
+    await _loadCustomCommands();
+    unawaited(_connectMcp());
+  }
+
+  /// Re-reads storage permission after the user comes back from Settings.
+  Future<void> refreshDeviceState() async {
+    if (!DeviceBridge.isAndroid) return;
+    await DeviceBridge.refresh();
+    storageAccess = DeviceBridge.info.storageAccess;
+    termuxAvailable = DeviceBridge.info.termux;
+    notifyListeners();
+  }
+
+  /// Points the agent at another folder. Returns an empty string on success,
+  /// otherwise the reason the folder cannot be used.
+  Future<String> switchWorkspace(String path) async {
+    final String problem = await WorkspaceResolver.validate(path);
+    if (problem.isNotEmpty) return problem;
+    final String clean = path.trim();
+    if (clean == _workspacePath && _toolbox != null) return '';
+    await WorkspaceResolver.bootstrap(clean);
+    final ToolBox box = await ToolBox.openAt(clean);
+    _toolbox = box;
+    _workspacePath = clean;
+    workspaceEpoch++;
+    await _bindExtensions();
+    await Store.saveWorkspace(clean);
+    fileIndex = <String>[];
+    notifyListeners();
+    unawaited(refreshFileIndex());
+    return '';
+  }
+
+  Future<List<String>> recentWorkspaces() => Store.loadRecentWorkspaces();
 
   Conversation? get current {
     if (currentId == null) return null;
@@ -126,7 +197,9 @@ class AppState extends ChangeNotifier {
 
   Directory? get workspace => _toolbox?.workspace;
 
-  String get workspacePath => _toolbox?.workspace.path ?? '';
+  String get workspacePath => _workspacePath.isEmpty
+      ? (_toolbox?.workspace.path ?? '')
+      : _workspacePath;
 
   /// Changes only when a finished message lands, so settled bubbles can skip
   /// rebuilding on every streaming tick.
@@ -509,15 +582,17 @@ class AppState extends ChangeNotifier {
     return '${cfg.systemPrompt}\n\n'
         '## Runtime\n'
         'You are running inside an Android app, not on a server. Your workspace '
-        'is $ws and every file tool is sandboxed to it.\n'
-        'Available tools: bash (sh + toybox, PATH already includes module bins), '
-        'read_file, write_file, edit_file, list_dir, glob, grep, make_dir, '
-        'move_file, delete_file, web_fetch, todo_write'
+        'is $ws — a real folder on the user\'s phone, not a sandbox copy: the '
+        'files you edit are the files they see in their file manager, and the '
+        'shell uses the same absolute paths.\n'
+        'Available tools: bash (sh + toybox; PATH starts with .zcode/bin, then '
+        'module bins), read_file, write_file, edit_file, list_dir, glob, grep, '
+        'make_dir, move_file, delete_file, web_fetch, todo_write'
         '${agentNames.isEmpty ? '' : ', task'}'
         '${mcpToolCount == 0 ? '' : ', plus $mcpToolCount MCP tools named mcp__<server>__<tool>'}.\n'
-        'Installed CLI modules: $mods. If a missing runtime (node, python, git) '
-        'blocks the task, say so and suggest installing a module instead of '
-        'pretending it worked.\n'
+        'Installed CLI modules: $mods. If node, python or git is missing, the '
+        'user can run that command through Termux (the terminal page has a '
+        'Termux mode) — say so plainly instead of pretending it worked.\n'
         '${agentNames.isEmpty ? '' : 'Sub-agents you can pass to task: ${agentNames.join(', ')}.\n'}'
         '${cmds.isEmpty ? '' : 'Plugin commands the user has: $cmds.\n'}'
         'Working rules:\n'
@@ -526,8 +601,9 @@ class AppState extends ChangeNotifier {
         '- Inspect before editing. Prefer small, exact edits over rewrites.\n'
         '- Verify by running code or commands; never claim success without '
         'seeing the output.\n'
-        '- Keep paths inside the workspace, and finish with a short summary of '
-        'what changed and how it was verified.'
+        '- Stay inside the workspace unless the user explicitly points at '
+        'another folder; then use the absolute path.\n'
+        '- Finish with a short summary of what changed and how it was verified.'
         '${await _projectContext()}';
   }
 
@@ -1178,10 +1254,81 @@ class AppState extends ChangeNotifier {
     return <String>[...starts, ...contains].take(limit).toList();
   }
 
-  Future<String> runShell(String command, {int timeout = 60}) async {
+  Future<String> runShell(String command,
+      {int timeout = 60, String? cwd}) async {
     final ToolBox? box = _toolbox;
     if (box == null) return '工具环境尚未就绪';
-    return box.shell(command, timeout: timeout);
+    return box.shell(command, timeout: timeout, cwd: cwd ?? workspacePath);
+  }
+
+  /// Runs a command through Termux, which is where node / python / git live on
+  /// a phone. Output is polled from a file because the service has no pipe.
+  Future<String> runTermux(String command,
+      {String? cwd, int timeout = 180}) async {
+    if (!DeviceBridge.isAndroid) {
+      return 'Termux 桥接只在 Android 上可用。';
+    }
+    final String dir = (cwd ?? workspacePath).trim();
+    if (dir.isEmpty) return '请先选择工作区。';
+    if (!WorkspaceResolver.isShared(dir)) {
+      return '当前工作区在应用私有目录，Termux 读不到。\n'
+          '请在「工作区」里改选内部存储上的文件夹（例如 内部存储/ZCode），'
+          '选中后这里的命令就能直接跑 node、python、git 了。';
+    }
+    if (!await DeviceBridge.termuxInstalled()) {
+      return '没有检测到 Termux。\n'
+          '手机上跑 node/python/git 需要它：装好 Termux 后执行\n'
+          '  pkg install nodejs python git\n'
+          '再回到这里就能用了。';
+    }
+    final Directory meta = Directory('$dir/.zcode');
+    try {
+      await meta.create(recursive: true);
+    } catch (e) {
+      return '无法写入 $dir/.zcode：$e';
+    }
+    final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
+    final String out = '${meta.path}/termux-$stamp.out';
+    final String exit = '${meta.path}/termux-$stamp.exit';
+    final bool sent = await DeviceBridge.termuxRun(
+      command: command,
+      cwd: dir,
+      outFile: out,
+      exitFile: exit,
+    );
+    if (!sent) {
+      return '无法唤起 Termux。\n'
+          '请在 Termux 里执行：\n'
+          '  echo "allow-external-apps=true" >> ~/.termux/termux.properties\n'
+          '  termux-reload-settings\n'
+          '然后重试。';
+    }
+    int code = -1;
+    final DateTime deadline = DateTime.now().add(Duration(seconds: timeout));
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final File marker = File(exit);
+      if (await marker.exists()) {
+        code = int.tryParse((await marker.readAsString()).trim()) ?? 0;
+        break;
+      }
+    }
+    String body = '';
+    try {
+      body = await File(out).readAsString();
+    } catch (_) {}
+    for (final String p in <String>[out, exit]) {
+      try {
+        await File(p).delete();
+      } catch (_) {}
+    }
+    if (code == -1) {
+      return 'Termux 在 ${timeout}s 内没有回传结果（命令可能还在跑，或 Termux 被系统冻结）。';
+    }
+    final String trimmed = body.trim();
+    final String shown =
+        trimmed.length > 12000 ? '${trimmed.substring(0, 12000)}\n…' : trimmed;
+    return '${shown.isEmpty ? '(no output)' : shown}\n\n[exit $code]';
   }
 
   Future<Attachment?> attach(String relativePath) async {

@@ -29,6 +29,11 @@ const List<SlashCommand> kSlashCommands = <SlashCommand>[
       usage: '/undo',
       zh: '撤销本轮文件改动',
       en: 'Undo file changes'),
+  SlashCommand(
+      name: 'workspace',
+      usage: '/workspace',
+      zh: '切换工作区文件夹',
+      en: 'Switch workspace folder'),
   SlashCommand(name: 'files', usage: '/files', zh: '打开文件管理', en: 'Files'),
   SlashCommand(name: 'terminal', usage: '/terminal', zh: '打开终端', en: 'Terminal'),
   SlashCommand(name: 'modules', usage: '/modules', zh: '扩展模块', en: 'Modules'),

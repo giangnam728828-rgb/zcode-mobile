@@ -1,17 +1,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="ai.zcode.zcode_mobile">
    <uses-permission android:name="android.permission.INTERNET"/>
+
+   <!-- Real files on the phone: the workspace is a user folder, not a sandbox. -->
+   <uses-permission
+       android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+       tools:ignore="ScopedStorage" />
+   <uses-permission
+       android:name="android.permission.READ_EXTERNAL_STORAGE"
+       android:maxSdkVersion="32" />
+   <uses-permission
+       android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+       android:maxSdkVersion="29" />
+   <!-- Running commands from the app itself needs nothing extra; Termux gets
+        the request over its RUN_COMMAND service. -->
+   <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
    <!-- Android 11+ package visibility: needed to hand the OAuth URL to a browser -->
    <queries>
        <intent>
            <action android:name="android.intent.action.VIEW" />
            <data android:scheme="https" />
        </intent>
+       <!-- Termux, for node / python / git builds on device. -->
+       <package android:name="com.termux" />
+       <intent>
+           <action android:name="android.intent.action.VIEW" />
+           <data android:mimeType="*/*" />
+       </intent>
    </queries>
    <application
         android:label="ZCode"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -33,6 +56,16 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Lets the file page hand a real file to another app (viewer/editor). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

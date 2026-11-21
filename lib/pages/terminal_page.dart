@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../platform/device_bridge.dart';
+import '../services/workspace.dart';
 import '../state/app_state.dart';
 
 /// A real shell inside the app sandbox. Not a full pty, but enough to inspect
@@ -30,6 +34,12 @@ class _TerminalPageState extends State<TerminalPage> {
   final FocusNode _focus = FocusNode();
   int _historyAt = -1;
   bool _busy = false;
+  String _cwd = '';
+  int _epoch = -1;
+
+  /// Termux runs node/python/git; the built-in shell is instant and always
+  /// available. Both point at the same real folder.
+  bool _termux = false;
 
   @override
   void initState() {
@@ -48,16 +58,31 @@ class _TerminalPageState extends State<TerminalPage> {
   Future<void> _run([String? preset]) async {
     final String cmd = (preset ?? _input.text).trim();
     if (cmd.isEmpty || _busy) return;
+    final AppState state = context.read<AppState>();
     _input.clear();
     if (_history.isEmpty || _history.last != cmd) _history.add(cmd);
     _historyAt = -1;
+
+    // `cd` has to be handled here: every command is its own process, so the
+    // shell cannot keep a working directory between runs.
+    if (cmd == 'cd' || cmd.startsWith('cd ') || cmd == 'cd ~') {
+      _changeDir(cmd.length > 2 ? cmd.substring(2).trim() : '');
+      return;
+    }
+    if (cmd == 'clear') {
+      setState(() => _entries.clear());
+      return;
+    }
+
     final _Entry entry = _Entry(cmd);
     setState(() {
       _entries.add(entry);
       _busy = true;
     });
     _scrollDown();
-    final String out = await context.read<AppState>().runShell(cmd);
+    final String out = _termux
+        ? await state.runTermux(cmd, cwd: _cwd)
+        : await state.runShell(cmd, cwd: _cwd);
     if (!mounted) return;
     setState(() {
       entry
@@ -68,6 +93,60 @@ class _TerminalPageState extends State<TerminalPage> {
     });
     _scrollDown();
     _focus.requestFocus();
+  }
+
+  void _changeDir(String arg) {
+    final String root = context.read<AppState>().workspacePath;
+    String target;
+    if (arg.isEmpty || arg == '~') {
+      target = root;
+    } else if (arg.startsWith('/')) {
+      target = arg;
+    } else {
+      target = '$_cwd/$arg';
+    }
+    target = WorkspaceResolver.normalize(target);
+    final bool isDir = FileSystemEntity.isDirectorySync(target);
+    final _Entry entry = _Entry('cd ${arg.isEmpty ? '~' : arg}');
+    setState(() {
+      entry
+        ..running = false
+        ..output = isDir
+            ? target
+            : 'cd: no such directory: $target\n\n[exit 1]'
+        ..exit = isDir ? 0 : 1;
+      if (isDir) _cwd = target;
+      _entries.add(entry);
+    });
+    _scrollDown();
+  }
+
+  Future<void> _toggleTermux() async {
+    final AppState state = context.read<AppState>();
+    if (!DeviceBridge.isAndroid) {
+      _toast('Termux 模式只在 Android 上可用');
+      return;
+    }
+    if (!_termux) {
+      final bool installed = await DeviceBridge.termuxInstalled();
+      if (!installed) {
+        _toast('没检测到 Termux。装上它并在里面 pkg install nodejs python git，'
+            '就能在手机上跑真正的构建。');
+      } else if (!state.storageAccess) {
+        _toast('建议先去「工作区」授予文件权限，否则 Termux 与 App 看不到同一批文件。');
+      }
+    }
+    setState(() => _termux = !_termux);
+  }
+
+  void _toast(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(text),
+        duration: const Duration(milliseconds: 2400),
+      ));
   }
 
   static int? _exitOf(String out) {
@@ -109,13 +188,20 @@ class _TerminalPageState extends State<TerminalPage> {
     final ColorScheme cs = theme.colorScheme;
     final bool dark = theme.brightness == Brightness.dark;
 
+    // Workspace switched underneath us: forget the old cwd.
+    if (_epoch != state.workspaceEpoch || _cwd.isEmpty) {
+      _epoch = state.workspaceEpoch;
+      _cwd = state.workspacePath;
+    }
+
     final List<String> quick = <String>[
       'pwd',
       'ls -la',
+      'cd ..',
       'df -h .',
       'uname -a',
       'ps -A | head -20',
-      en ? 'du -sh * 2>/dev/null' : 'du -sh * 2>/dev/null',
+      'du -sh * 2>/dev/null',
     ];
 
     return Scaffold(
@@ -125,18 +211,32 @@ class _TerminalPageState extends State<TerminalPage> {
           children: <Widget>[
             Text(en ? 'Terminal' : '终端'),
             Text(
-              state.workspacePath.isEmpty ? 'sandbox' : state.workspacePath,
+              _cwd.isEmpty ? 'sandbox' : _cwd,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w400,
+                fontFamily: 'monospace',
                 color: cs.onSurface.withOpacity(0.4),
               ),
             ),
           ],
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: _termux
+                ? (en ? 'Termux: on (tap for built-in sh)'
+                      : 'Termux 执行中（点一下回到内置 sh）')
+                : (en ? 'Run with Termux (node/python/git)'
+                      : '用 Termux 跑（node/python/git）'),
+            icon: Icon(
+              _termux ? Icons.bolt_rounded : Icons.memory_rounded,
+              size: 19,
+              color: _termux ? cs.primary : null,
+            ),
+            onPressed: _toggleTermux,
+          ),
           IconButton(
             tooltip: en ? 'Copy transcript' : '复制全部输出',
             icon: const Icon(Icons.copy_all_rounded, size: 19),
@@ -177,6 +277,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         _entryView(_entries[i], cs, dark),
                   ),
           ),
+          if (_termux) _modeHint(cs, en),
           _quickBar(quick, cs, dark),
           SafeArea(
             top: false,
@@ -290,8 +391,10 @@ class _TerminalPageState extends State<TerminalPage> {
             const SizedBox(height: 6),
             Text(
               en
-                  ? 'Commands run in the app workspace with the same PATH the agent uses.'
-                  : '命令跑在应用私有工作区里，PATH 与智能体完全一致。',
+                  ? 'Commands run in your real workspace folder with the same PATH '
+                      'the agent uses. Switch on Termux mode for node, python and git.'
+                  : '命令跑在你自己的文件夹里，PATH 与智能体一致；'
+                      '右上角打开 Termux 模式就能用 node、python、git。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
@@ -389,6 +492,31 @@ class _TerminalPageState extends State<TerminalPage> {
                               : const Color(0xFF2B3340)),
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeHint(ColorScheme cs, bool en) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+      color: cs.primary.withOpacity(0.07),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.bolt_rounded, size: 13, color: cs.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              en
+                  ? 'Termux mode · same files, full toolchain'
+                  : 'Termux 模式 · 同一批文件，完整工具链',
+              style: TextStyle(
+                fontSize: 10.5,
+                color: cs.primary.withOpacity(0.85),
+              ),
+            ),
           ),
         ],
       ),

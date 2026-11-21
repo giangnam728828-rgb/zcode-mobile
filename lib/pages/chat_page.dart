@@ -17,6 +17,7 @@ import 'modules_page.dart';
 import 'plugins_page.dart';
 import 'settings_page.dart';
 import 'terminal_page.dart';
+import 'workspace_picker_page.dart';
 
 /// The conversation view: header, transcript, composer.
 class ChatPage extends StatefulWidget {
@@ -457,6 +458,9 @@ class _ChatPageState extends State<ChatPage> {
                     : '已把 $n 条早期消息折叠为摘要')),
           ));
         break;
+      case 'workspace':
+        await _openWorkspace();
+        break;
       case 'files':
         await _openFiles();
         break;
@@ -577,6 +581,22 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // -------------------------------------------------------------------- pages
+
+  Future<void> _openWorkspace() async {
+    final bool? changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) =>
+            WorkspacePickerPage(initialPath: context.read<AppState>().workspacePath),
+      ),
+    );
+    if (!mounted || changed != true) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(context.read<AppState>().workspacePath),
+        duration: const Duration(milliseconds: 1600),
+      ));
+  }
 
   Future<void> _openFiles() async {
     final String? mention = await Navigator.of(context).push<String>(
@@ -972,6 +992,9 @@ class _ChatPageState extends State<ChatPage> {
           case 'export':
             _exportMarkdown(convo, s);
             break;
+          case 'workspace':
+            await _openWorkspace();
+            break;
           case 'files':
             await _openFiles();
             break;
@@ -993,6 +1016,8 @@ class _ChatPageState extends State<ChatPage> {
         }
       },
       itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
+        _menuItem('workspace', Icons.smartphone_rounded,
+            en ? 'Workspace folder' : '工作区文件夹'),
         _menuItem('files', Icons.folder_open_rounded,
             en ? 'Files' : '文件'),
         _menuItem('terminal', Icons.terminal_rounded,

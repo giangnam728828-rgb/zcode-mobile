@@ -19,8 +19,29 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The permission screen and the file manager both send us to the
+    // background; on return the workspace may now be readable.
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<AppState>().refreshDeviceState();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 enum ToolStatus { pending, running, done, failed, denied }
@@ -156,15 +157,34 @@ class ExternalTool {
   final String server;
 }
 
-/// Executes shell commands and file edits inside a private workspace, the way
-/// the desktop agent does — but scoped to the app sandbox on Android.
+/// Executes shell commands and file edits in the user's real workspace.
+///
+/// On a phone that is a folder the user picked on shared storage, so the paths
+/// here are the same ones their file manager and Termux see — no virtual file
+/// system in between.
 class ToolBox {
-  ToolBox._(this.workspace);
+  ToolBox._(this.workspace, {bool? allowOutside})
+      : allowOutside = allowOutside ?? _androidByDefault;
 
   /// Test hook: run against an explicit directory without the platform plugin.
-  ToolBox.at(Directory dir) : workspace = dir;
+  ToolBox.at(this.workspace, {this.allowOutside = false});
 
   final Directory workspace;
+
+  /// Whether absolute paths outside [workspace] may be read and written. True
+  /// on Android once the workspace lives on shared storage: the user's own
+  /// folders are the point, so a second layer of sandboxing would only get in
+  /// the way.
+  final bool allowOutside;
+
+  static bool get _androidByDefault {
+    if (kIsWeb) return false;
+    try {
+      return Platform.isAndroid;
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// Extra `bin` directories contributed by installed modules.
   final List<String> extraPaths = <String>[];
@@ -209,28 +229,48 @@ class ToolBox {
     return ToolBox._(ws);
   }
 
+  /// Opens an explicit folder — the one the user picked in the picker.
+  static Future<ToolBox> openAt(String path) async {
+    final Directory ws = Directory(path);
+    if (!await ws.exists()) await ws.create(recursive: true);
+    return ToolBox._(ws);
+  }
+
   static const int _maxOutput = 14000;
 
+  /// `bin` folders searched before the system ones. Keeping the workspace one
+  /// first means a script dropped in `.zcode/bin` shadows a system tool.
+  List<String> get binPaths => <String>[
+        '${workspace.path}/.zcode/bin',
+        ...extraPaths,
+      ];
+
   String get pathEnv {
-    final String base = Platform.isAndroid
+    final String base = _androidByDefault
         ? '/system/bin:/system/xbin:/vendor/bin:/product/bin:/bin'
         : '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
-    if (extraPaths.isEmpty) return base;
-    return '${extraPaths.join(':')}:$base';
+    return '${binPaths.join(':')}:$base';
   }
 
   static List<ToolSpec> get specs => const <ToolSpec>[
         ToolSpec(
           'bash',
-          'Run a shell command in the workspace. Android provides sh plus the '
-              'usual toybox utilities (ls, cat, grep, sed, find, curl...). '
-              'Use it to inspect files, run scripts and check results.',
+          'Run a shell command in the workspace. This is a real shell on the '
+              'user\'s phone: sh plus the toybox utilities (ls, cat, grep, sed, '
+              'find, tar, curl...), anything installed under .zcode/bin, and '
+              'the module binaries. Use it to inspect files, run scripts, '
+              'check build output and verify results.',
           <String, dynamic>{
             'type': 'object',
             'properties': <String, dynamic>{
               'command': <String, dynamic>{
                 'type': 'string',
                 'description': 'Shell command'
+              },
+              'cwd': <String, dynamic>{
+                'type': 'string',
+                'description':
+                    'Directory to run in, relative to the workspace or absolute'
               },
               'timeout': <String, dynamic>{
                 'type': 'integer',
@@ -456,7 +496,10 @@ class ToolBox {
     int restored = 0;
     final List<MapEntry<String, String>> entries = _backups.entries.toList();
     for (final MapEntry<String, String> e in entries) {
-      final String abs = _resolve(e.key);
+      // Keys for files outside the workspace are stored as `external/<abs>`.
+      final String abs = e.key.startsWith('external/')
+          ? e.key.substring('external'.length)
+          : _resolve(e.key);
       try {
         if (e.value.isEmpty) {
           final FileSystemEntityType t = FileSystemEntity.typeSync(abs);
@@ -491,7 +534,10 @@ class ToolBox {
   Future<void> _snapshot(String absPath) async {
     final String? stamp = _turnStamp;
     if (stamp == null) return;
-    final String rel = relPath(absPath);
+    final String relRaw = relPath(absPath);
+    // Files outside the workspace need a key that cannot collide with a
+    // relative path, so they get an `external/` prefix holding the abs path.
+    final String rel = relRaw.startsWith('/') ? 'external$relRaw' : relRaw;
     if (rel.isEmpty || _backups.containsKey(rel)) return;
     final FileSystemEntityType type = FileSystemEntity.typeSync(absPath);
     if (type == FileSystemEntityType.directory) return;
@@ -575,17 +621,20 @@ class ToolBox {
     final String command = '${call.input['command'] ?? ''}'.trim();
     if (command.isEmpty) return 'Empty command';
     final int seconds = (call.input['timeout'] as int?) ?? 60;
-    final String shell = Platform.isAndroid ? '/system/bin/sh' : '/bin/sh';
+    final String dir = _cwd(call.input['cwd']);
+    final String shell = _androidByDefault ? '/system/bin/sh' : '/bin/sh';
     try {
       final ProcessResult r = await Process.run(
         shell,
         <String>['-c', command],
-        workingDirectory: workspace.path,
+        workingDirectory: dir,
         environment: <String, String>{
           'PATH': pathEnv,
           'HOME': workspace.path,
+          'PWD': dir,
           'TMPDIR': '${workspace.path}/.tmp',
           'ZCODE_WORKSPACE': workspace.path,
+          'TERM': 'dumb',
         },
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
@@ -600,6 +649,11 @@ class ToolBox {
         b.writeln(err);
       }
       if (b.isEmpty) b.writeln('(no output)');
+      if (r.exitCode == 126 || r.exitCode == 127) {
+        b.writeln('\n[hint] 126/127 means "not found" or "not executable". '
+            'Shared storage on Android is usually mounted noexec, so run a '
+            'script with `sh <path>` instead of calling it directly.');
+      }
       b.writeln('\n[exit ${r.exitCode}]');
       return _clip(b.toString());
     } on TimeoutException {
@@ -607,6 +661,17 @@ class ToolBox {
     } catch (e) {
       return 'Command failed: $e';
     }
+  }
+
+  /// Resolves a requested working directory, falling back to the workspace.
+  String _cwd(Object? raw) {
+    final String wanted = '${raw ?? ''}'.trim();
+    if (wanted.isEmpty) return workspace.path;
+    try {
+      final String abs = _resolve(wanted);
+      if (FileSystemEntity.isDirectorySync(abs)) return abs;
+    } catch (_) {}
+    return workspace.path;
   }
 
   Future<String> _read(ToolCall call) async {
@@ -897,10 +962,15 @@ class ToolBox {
   }
 
   /// Runs a command on behalf of the terminal page (output is not escaped).
-  Future<String> shell(String command, {int timeout = 60}) => _bash(ToolCall(
+  Future<String> shell(String command, {int timeout = 60, String? cwd}) =>
+      _bash(ToolCall(
         id: 'term${DateTime.now().microsecondsSinceEpoch}',
         name: 'bash',
-        input: <String, dynamic>{'command': command, 'timeout': timeout},
+        input: <String, dynamic>{
+          'command': command,
+          'timeout': timeout,
+          if (cwd != null) 'cwd': cwd,
+        },
       ));
 
   /// Flat file index for the `@` mention picker.
@@ -941,8 +1011,15 @@ class ToolBox {
     if (normalized == root || normalized.startsWith('$root/')) {
       return normalized;
     }
-    // Anything reaching outside the sandbox collapses to the root itself, so
-    // the caller just sees "not found" instead of a file from the real system.
+    // Shared storage is fair game: those are the user's own folders and the
+    // whole point of picking a real workspace.
+    if (allowOutside &&
+        (normalized.startsWith('/storage/') ||
+            normalized.startsWith('/sdcard'))) {
+      return normalized;
+    }
+    // Anything else collapses to the root itself, so the caller just sees
+    // "not found" instead of a file from the app's private data.
     return root;
   }
 

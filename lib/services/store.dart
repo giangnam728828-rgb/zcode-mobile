@@ -86,4 +86,36 @@ class Store {
     await prefs.remove(_kConvos);
     await prefs.remove(_kLegacyMessages);
   }
+
+  // ---------------------------------------------------------------- workspace
+
+  static const String _kWorkspace = 'zcode.workspace.path';
+  static const String _kRecentWorkspaces = 'zcode.workspace.recent';
+
+  /// Absolute path of the folder the agent works in, or null before the first
+  /// run (the caller then asks the resolver for a suggestion).
+  static Future<String?> loadWorkspace() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? path = prefs.getString(_kWorkspace);
+    if (path == null || path.trim().isEmpty) return null;
+    return path;
+  }
+
+  static Future<void> saveWorkspace(String path) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kWorkspace, path);
+    final List<String> recent = prefs.getStringList(_kRecentWorkspaces) ??
+        <String>[];
+    recent.remove(path);
+    recent.insert(0, path);
+    while (recent.length > 8) {
+      recent.removeLast();
+    }
+    await prefs.setStringList(_kRecentWorkspaces, recent);
+  }
+
+  static Future<List<String>> loadRecentWorkspaces() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_kRecentWorkspaces) ?? <String>[];
+  }
 }
