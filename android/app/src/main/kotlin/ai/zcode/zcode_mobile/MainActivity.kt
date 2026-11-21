@@ -6,13 +6,17 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.StatFs
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import java.util.concurrent.Executors
 
 /**
  * Native side of the "real files on the phone" story.
@@ -22,14 +26,27 @@ import java.io.File
  * the user's own folders with plain java.io — no SAF document ids, which means
  * `dart:io` and the shell see exactly the same paths. That is what makes
  * `git`, `npm` and shell scripts behave like they do on a desktop.
+ *
+ * Two more channels sit next to it: `ai.zcode/privilege` for root and Shizuku,
+ * and `ai.zcode/device_events` for the physical things a phone can sense.
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "ai.zcode/device"
+    private val privilegeChannel = "ai.zcode/privilege"
+    private val eventChannel = "ai.zcode/device_events"
     private val storageRequest = 4711
+
+    private val main = Handler(Looper.getMainLooper())
+    private val worker = Executors.newCachedThreadPool()
+    private var events: DeviceEvents? = null
+    private var deviceChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        deviceChannel = channel
+        channel
             .setMethodCallHandler { call, result ->
                 try {
                     when (call.method) {
@@ -58,6 +75,141 @@ class MainActivity : FlutterActivity() {
                     result.error("device_error", e.message ?: e.toString(), null)
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, privilegeChannel)
+            .setMethodCallHandler { call, result ->
+                try {
+                    when (call.method) {
+                        "capabilities" -> result.success(Privilege.capabilities(this))
+                        "hasRoot" -> {
+                            val force = call.argument<Boolean>("force") ?: false
+                            worker.execute {
+                                val ok = Privilege.rootAvailable(force)
+                                main.post { result.success(ok) }
+                            }
+                        }
+                        "run" -> {
+                            // A shell can take seconds; never block the platform
+                            // thread that also drives the Flutter UI.
+                            val command = call.argument<String>("command") ?: ""
+                            val mode = call.argument<String>("mode") ?: "auto"
+                            val timeout = call.argument<Int>("timeout") ?: 30
+                            worker.execute {
+                                val out = Privilege.run(mode, command, timeout)
+                                main.post { result.success(out) }
+                            }
+                        }
+                        "requestShizuku" -> result.success(Privilege.requestShizuku(this))
+                        "openShizuku" -> result.success(Privilege.openShizuku(this))
+                        "notify" -> result.success(
+                            Privilege.notify(
+                                this,
+                                call.argument<Int>("id") ?: 1,
+                                call.argument<String>("title") ?: "",
+                                call.argument<String>("body") ?: ""
+                            )
+                        )
+                        "requestNotifications" ->
+                            result.success(Privilege.requestNotifications(this))
+                        "clipboardGet" -> result.success(Privilege.clipboardGet(this))
+                        "clipboardSet" -> result.success(
+                            Privilege.clipboardSet(this, call.argument<String>("text") ?: "")
+                        )
+                        "vibrate" -> result.success(
+                            Privilege.vibrate(this, call.argument<Int>("ms") ?: 120)
+                        )
+                        "openApp" -> result.success(
+                            Privilege.openApp(this, call.argument<String>("target") ?: "")
+                        )
+                        "apps" -> result.success(
+                            Privilege.installedApps(this, call.argument<String>("query") ?: "")
+                        )
+                        "battery" -> result.success(Privilege.battery(this))
+                        "volume" -> result.success(
+                            Privilege.volume(
+                                this,
+                                call.argument<String>("stream") ?: "music",
+                                call.argument<Int>("delta") ?: 0
+                            )
+                        )
+                        "openSpecial" -> result.success(
+                            Privilege.openSpecial(this, call.argument<String>("kind") ?: "")
+                        )
+                        else -> result.notImplemented()
+                    }
+                } catch (e: Throwable) {
+                    result.error("privilege_error", e.message ?: e.toString(), null)
+                }
+            }
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, eventChannel)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                    val bridge = DeviceEvents(applicationContext) { event ->
+                        main.post { sink?.success(event) }
+                    }
+                    events = bridge
+                    bridge.start()
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    events?.stop()
+                    events = null
+                }
+            })
+
+        // Launcher shortcuts and the share sheet both arrive as intents; hand
+        // them to Dart once the engine is ready.
+        main.post { handleIntent(intent) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    /**
+     * `zcode.shortcut=automation|new_chat` from a long-press shortcut, or
+     * ACTION_SEND text from another app's share sheet.
+     */
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val map = HashMap<String, Any>()
+        val shortcut = intent.getStringExtra("zcode.shortcut")
+        if (!shortcut.isNullOrEmpty()) {
+            map["kind"] = "shortcut"
+            map["value"] = shortcut
+        } else if (intent.action == Intent.ACTION_SEND) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+            val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
+            if (text.isEmpty() && subject.isEmpty()) return
+            map["kind"] = "share"
+            map["value"] = text
+            map["subject"] = subject
+        } else {
+            return
+        }
+        try {
+            deviceChannel?.invokeMethod("intent", map)
+        } catch (e: Throwable) {
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Shizuku grants its API permission through this same callback, so a
+        // successful dialog is visible immediately without a second probe.
+    }
+
+    override fun onDestroy() {
+        events?.stop()
+        events = null
+        super.onDestroy()
     }
 
     // ------------------------------------------------------------- capability
@@ -204,9 +356,15 @@ class MainActivity : FlutterActivity() {
      * owns a proper prefix. We hand it a background command that writes its
      * output next to the workspace, and Dart polls for the exit marker.
      */
-    private fun termuxRun(command: String, cwd: String, outFile: String, exitFile: String): Boolean {
+    private fun termuxRun(
+        command: String,
+        cwd: String,
+        outFile: String,
+        exitFile: String
+    ): Boolean {
         if (command.isEmpty() || outFile.isEmpty() || exitFile.isEmpty()) return false
-        val workdir = if (cwd.isEmpty()) Environment.getExternalStorageDirectory().absolutePath else cwd
+        val workdir =
+            if (cwd.isEmpty()) Environment.getExternalStorageDirectory().absolutePath else cwd
         val script = "cd ${quote(workdir)} 2>/dev/null; " +
             "{ $command ; } > ${quote(outFile)} 2>&1; " +
             "echo \$? > ${quote(exitFile)}"

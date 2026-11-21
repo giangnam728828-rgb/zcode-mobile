@@ -30,6 +30,11 @@ const List<SlashCommand> kSlashCommands = <SlashCommand>[
       zh: '撤销本轮文件改动',
       en: 'Undo file changes'),
   SlashCommand(
+      name: 'automation',
+      usage: '/automation',
+      zh: '打开自动化规则',
+      en: 'Automation rules'),
+  SlashCommand(
       name: 'workspace',
       usage: '/workspace',
       zh: '切换工作区文件夹',

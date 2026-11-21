@@ -9,11 +9,14 @@ import 'models/attachment.dart';
 import 'models/chat_message.dart';
 import 'models/conversation.dart';
 import 'pages/home_shell.dart';
+import 'pages/automation_page.dart';
 import 'pages/modules_page.dart';
 import 'pages/plugins_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/terminal_page.dart';
 import 'pages/workspace_picker_page.dart';
+import 'platform/privilege_bridge.dart';
+import 'services/automation.dart';
 import 'services/plugins.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
@@ -22,6 +25,8 @@ Widget _pageFor(String? page) {
   switch (page) {
     case 'modules':
       return const ModulesPage();
+    case 'automation':
+      return const AutomationPage();
     case 'terminal':
       return const TerminalPage();
     case 'plugins':
@@ -42,6 +47,38 @@ void main() {
   state.config = AppConfig.empty.copyWith(model: 'glm-4.6');
   // The web preview has no real workspace, but the market tab is pure catalog.
   state.pluginCenter = PluginCenter(null);
+  state.automation = AutomationEngine(
+    runner: (AutomationRule r, AutomationAction a) async => 'ok',
+  );
+  state.automation!.rules.addAll(
+    AutomationTemplates.market().take(4).map((AutomationRule r) =>
+        AutomationRule(
+          id: r.id,
+          name: r.name,
+          trigger: r.trigger,
+          actions: r.actions,
+          enabled: r.id != 'tpl-unlock-brief',
+          lastRunMs: r.id == 'builtin-nightly'
+              ? DateTime.now()
+                  .subtract(const Duration(hours: 13))
+                  .millisecondsSinceEpoch
+              : 0,
+          runCount: r.id == 'builtin-nightly' ? 6 : 0,
+          lastResult: r.id == 'builtin-nightly'
+              ? '今天主要改了工作区切换与 Termux 桥接；明天接着补自动化。'
+              : '',
+        )),
+  );
+  PrivilegeBridge.debugSetStatus(const PrivStatus(
+    root: true,
+    shizuku: true,
+    shizukuGranted: true,
+    channel: 'root',
+    notifications: true,
+    writeSettings: true,
+    dndAccess: true,
+  ));
+  state.privilege = PrivilegeBridge.status;
   final Conversation c = Conversation(id: 'demo', title: '整理工作区并补文档');
 
   final ToolCall bash = ToolCall(

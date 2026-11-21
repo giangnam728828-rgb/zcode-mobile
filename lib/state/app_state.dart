@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../agent/agent_runner.dart';
 import '../agent/commands.dart';
@@ -13,7 +14,9 @@ import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../platform/device_bridge.dart';
+import '../platform/privilege_bridge.dart';
 import '../services/account.dart';
+import '../services/automation.dart';
 import '../services/modules.dart';
 import '../services/plugins.dart';
 import '../services/store.dart';
@@ -68,6 +71,12 @@ class AppState extends ChangeNotifier {
   /// How many MCP tools are currently registered, shown in the settings card.
   int mcpToolCount = 0;
 
+  /// Root / Shizuku availability, refreshed whenever the app comes back.
+  PrivStatus privilege = const PrivStatus();
+
+  /// Automation rules and their history. Created in [init].
+  AutomationEngine? automation;
+
   final AccountService _account = AccountService();
   ToolBox? _toolbox;
   AgentRunner? _runner;
@@ -94,6 +103,12 @@ class AppState extends ChangeNotifier {
     _toolbox = await ToolBox.openAt(wsPath);
     _workspacePath = wsPath;
     await _bindExtensions();
+    privilege = await PrivilegeBridge.refresh();
+    automation = AutomationEngine(runner: _runAutomationAction);
+    await automation!.load();
+    automation!.start();
+    _listenDeviceEvents();
+    unawaited(_seedSignal());
     final List<Conversation> loaded = await Store.loadConversations();
     conversations
       ..clear()
@@ -106,6 +121,7 @@ class AppState extends ChangeNotifier {
     ready = true;
     notifyListeners();
     unawaited(refreshFileIndex());
+    unawaited(_runBootRules());
   }
 
   /// First run: suggest `Internal storage/ZCode`, but honour whatever the user
@@ -150,6 +166,7 @@ class AppState extends ChangeNotifier {
     await DeviceBridge.refresh();
     storageAccess = DeviceBridge.info.storageAccess;
     termuxAvailable = DeviceBridge.info.termux;
+    privilege = await PrivilegeBridge.refresh();
     notifyListeners();
   }
 
@@ -594,12 +611,19 @@ class AppState extends ChangeNotifier {
         'shell uses the same absolute paths.\n'
         'Available tools: bash (sh + toybox; PATH starts with .zcode/bin, then '
         'module bins), read_file, write_file, edit_file, list_dir, glob, grep, '
-        'make_dir, move_file, delete_file, web_fetch, todo_write'
+        'make_dir, move_file, delete_file, web_fetch, todo_write, device '
+        '(notifications, clipboard, app launch, battery, volume; plus system '
+        'switches, screenshots and taps when root or Shizuku is available)'
         '${agentNames.isEmpty ? '' : ', task'}'
         '${mcpToolCount == 0 ? '' : ', plus $mcpToolCount MCP tools named mcp__<server>__<tool>'}.\n'
         'Installed CLI modules: $mods. If node, python or git is missing, the '
         'user can run that command through Termux (the terminal page has a '
         'Termux mode) — say so plainly instead of pretending it worked.\n'
+        'Privileged channel: ${privilege.label}. '
+        '${privilege.privileged ? 'You may use device actions that need it '
+            '(svc, pm, input, screencap, settings).' : 'Without root or Shizuku, '
+            'system-level device actions will fail — offer to enable one instead '
+            'of retrying.'}\n'
         '${agentNames.isEmpty ? '' : 'Sub-agents you can pass to task: ${agentNames.join(', ')}.\n'}'
         '${cmds.isEmpty ? '' : 'Plugin commands the user has: $cmds.\n'}'
         'Working rules:\n'
@@ -1370,6 +1394,188 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ------------------------------------------------------------- privilege
+
+  /// Re-reads root / Shizuku state. Cheap enough to call on every resume.
+  Future<void> refreshPrivilege() async {
+    privilege = await PrivilegeBridge.refresh();
+    notifyListeners();
+  }
+
+  /// Asks Shizuku for its API permission; falls back to opening the app so the
+  /// user can start the service if it is not running.
+  Future<bool> requestShizuku() async {
+    final bool asked = await PrivilegeBridge.requestShizuku();
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    await refreshPrivilege();
+    if (privilege.shizukuGranted) return true;
+    if (!asked) await PrivilegeBridge.openShizuku();
+    return privilege.shizukuGranted;
+  }
+
+  /// Runs a command as the shell uid through root or Shizuku.
+  Future<String> runPrivileged(
+    String command, {
+    String mode = 'auto',
+    int timeout = 30,
+  }) async {
+    final PrivResult r =
+        await PrivilegeBridge.run(command, mode: mode, timeout: timeout);
+    return r.text;
+  }
+
+  void _listenDeviceEvents() {
+    PrivilegeBridge.listen((Map<String, dynamic> event) {
+      automation?.onEvent(event);
+    });
+  }
+
+  Future<void> _seedSignal() async {
+    if (!DeviceBridge.isAndroid) return;
+    final Map<String, dynamic> b = await PrivilegeBridge.battery();
+    automation?.updateSignal(AutomationSignal(
+      batteryLevel: (b['level'] as num?)?.toInt() ?? -1,
+      charging: b['charging'] == true,
+      screenOn: b['screenOn'] != false,
+    ));
+  }
+
+  /// Boot is a one-shot flag: the native receiver cannot start the UI, so the
+  /// rules tagged `boot` run on the first launch after a reboot.
+  Future<void> _runBootRules() async {
+    final bool booted = await Store.takeFlag('boot');
+    final AutomationEngine? eng = automation;
+    if (!booted || eng == null) return;
+    for (final AutomationRule r in eng.enabledRules) {
+      if (r.trigger.kind != 'boot') continue;
+      await eng.run(r, auto: true);
+    }
+  }
+
+  // ------------------------------------------------------------ automation
+
+  Future<String> _runAutomationAction(
+    AutomationRule rule,
+    AutomationAction action,
+  ) async {
+    final Map<String, dynamic> a = action.args;
+    switch (action.kind) {
+      case 'notify':
+        final bool ok = await PrivilegeBridge.notify(
+          '${a['title'] ?? rule.name}',
+          '${a['body'] ?? ''}',
+          id: rule.id.hashCode & 0x7fff,
+        );
+        return ok ? '已发出通知' : '通知没发出去（可能缺少通知权限）';
+      case 'shell':
+        final String cmd = '${a['command'] ?? ''}'.trim();
+        if (cmd.isEmpty) return 'ERROR 命令为空';
+        final String mode = '${a['mode'] ?? 'builtin'}';
+        if (mode == 'builtin') return runShell(cmd);
+        if (mode == 'termux') return runTermux(cmd);
+        final PrivResult pr =
+            await PrivilegeBridge.run(cmd, mode: mode, timeout: 90);
+        if (!pr.ok) return 'ERROR ${pr.text}';
+        final String out = pr.stdout.trim();
+        return out.isEmpty ? '完成（${pr.channel}）' : out;
+      case 'device':
+        return _runDeviceAction(
+          '${a['action'] ?? ''}',
+          '${a['package'] ?? ''}',
+        );
+      case 'agent':
+        return _runAutomationAgent('${a['prompt'] ?? ''}'.trim());
+      case 'webhook':
+        return _postWebhook('${a['url'] ?? ''}', '${a['body'] ?? ''}');
+      default:
+        return 'ERROR 未知动作 ${action.kind}';
+    }
+  }
+
+  Future<String> _runDeviceAction(String id, String pkg) async {
+    if (id.isEmpty) return 'ERROR 没有选择设备动作';
+    if (id == 'screenshot') {
+      final String stamp = DateTime.now().millisecondsSinceEpoch.toString();
+      final String dir = workspacePath.isEmpty ? '/sdcard' : workspacePath;
+      final String path = '$dir/screenshot-$stamp.png';
+      final PrivResult r =
+          await PrivilegeBridge.run('screencap -p "$path"', timeout: 30);
+      return r.ok ? '已保存 $path' : 'ERROR ${r.text}';
+    }
+    if (!privilege.privileged) {
+      return 'ERROR 这个动作需要 root 或 Shizuku（当前：${privilege.label}）';
+    }
+    final String cmd = DeviceAction.command(id, pkg: pkg);
+    if (cmd.isEmpty) return 'ERROR 未知设备动作 $id';
+    final PrivResult r = await PrivilegeBridge.run(cmd, timeout: 25);
+    return r.ok ? '已完成（${r.channel}）' : 'ERROR ${r.text}';
+  }
+
+  /// A headless agent turn: no UI state is touched, so a scheduled rule can run
+  /// while the user is elsewhere in the app.
+  Future<String> _runAutomationAgent(String prompt) async {
+    if (prompt.isEmpty) return 'ERROR 提示词为空';
+    if (streaming) return 'ERROR 正在对话中，本轮跳过';
+    final AppConfig? cfg = config;
+    final ToolBox? box = _toolbox;
+    if (cfg == null || session == null) return 'ERROR 未登录账号';
+    if (box == null) return 'ERROR 工具环境未就绪';
+    await _refreshIfNeeded();
+    final StringBuffer out = StringBuffer();
+    try {
+      final AgentRunner runner = AgentRunner(
+        baseUrl: cfg.baseUrl,
+        token: session!.projectToken,
+        model: cfg.model,
+        toolbox: box,
+        maxTokens: cfg.maxTokens,
+        maxSteps: cfg.maxSteps,
+        temperature: cfg.temperature,
+      );
+      await runner.run(
+        wire: <Map<String, dynamic>>[
+          <String, dynamic>{'role': 'user', 'content': prompt},
+        ],
+        systemPrompt: '${await _systemPrompt(cfg)}\n\n'
+            '## 自动化执行\n'
+            '这条消息来自自动化规则，没有人在旁边回答你的问题。直接动手，'
+            '不要反问；破坏性操作要保守。最后用不超过 200 字说明做了什么、'
+            '结果如何。',
+        onText: (String t) => out.write(t),
+        onThinking: (String t) {},
+        onToolStart: (ToolCall c) {},
+        onToolUpdate: (ToolCall c) {},
+        // Nobody is around to approve: allow the tools, but the rule author
+        // wrote the prompt, so this is not a silent escalation.
+        approve: (ToolCall c) => Future<bool>.value(true),
+        onUsage: (int input, int output) {},
+      );
+    } catch (e) {
+      return 'ERROR $e';
+    }
+    final String text = out.toString().trim();
+    return text.isEmpty ? '智能体没有返回内容' : text;
+  }
+
+  Future<String> _postWebhook(String url, String body) async {
+    if (url.isEmpty) return 'ERROR URL 为空';
+    try {
+      final http.Response resp = await http
+          .post(
+            Uri.parse(url),
+            headers: <String, String>{'content-type': 'application/json'},
+            body: body.isEmpty ? '{}' : body,
+          )
+          .timeout(const Duration(seconds: 15));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return 'HTTP ${resp.statusCode}';
+      }
+      return 'ERROR HTTP ${resp.statusCode}';
+    } catch (e) {
+      return 'ERROR $e';
+    }
+  }
+
   Future<void> installRemoteModule(String url, {String? name}) async {
     final ModuleCenter? mc = moduleCenter;
     if (mc == null) return;
@@ -1416,6 +1622,8 @@ class AppState extends ChangeNotifier {
     _persist?.cancel();
     _drain?.cancel();
     _indexRefresh?.cancel();
+    automation?.stop();
+    PrivilegeBridge.stopListening();
     _account.dispose();
     super.dispose();
   }

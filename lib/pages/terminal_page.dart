@@ -37,9 +37,10 @@ class _TerminalPageState extends State<TerminalPage> {
   String _cwd = '';
   int _epoch = -1;
 
-  /// Termux runs node/python/git; the built-in shell is instant and always
-  /// available. Both point at the same real folder.
-  bool _termux = false;
+  /// `builtin` (sh + toybox), `termux` (node/python/git) or `priv`
+  /// (root/Shizuku: `pm`, `svc`, `input`, `settings` all work).
+  /// All three point at the same real folder.
+  String _mode = 'builtin';
 
   @override
   void initState() {
@@ -80,9 +81,18 @@ class _TerminalPageState extends State<TerminalPage> {
       _busy = true;
     });
     _scrollDown();
-    final String out = _termux
-        ? await state.runTermux(cmd, cwd: _cwd)
-        : await state.runShell(cmd, cwd: _cwd);
+    String out;
+    if (_mode == 'termux') {
+      out = await state.runTermux(cmd, cwd: _cwd);
+    } else if (_mode == 'priv') {
+      // The privileged channel has no cwd argument, so the directory rides
+      // along as a leading `cd`.
+      final String quoted = _cwd.replaceAll("'", "'\\''");
+      out = await state.runPrivileged("cd '$quoted' 2>/dev/null; $cmd",
+          timeout: 60);
+    } else {
+      out = await state.runShell(cmd, cwd: _cwd);
+    }
     if (!mounted) return;
     setState(() {
       entry
@@ -121,22 +131,45 @@ class _TerminalPageState extends State<TerminalPage> {
     _scrollDown();
   }
 
-  Future<void> _toggleTermux() async {
+  /// Cycles builtin → Termux → privileged → builtin, warning when the next
+  /// mode is not actually available instead of letting commands fail silently.
+  Future<void> _cycleMode() async {
     final AppState state = context.read<AppState>();
     if (!DeviceBridge.isAndroid) {
-      _toast('Termux 模式只在 Android 上可用');
+      _toast('只有 Android 上有多种执行通道');
       return;
     }
-    if (!_termux) {
+    if (_mode == 'builtin') {
       final bool installed = await DeviceBridge.termuxInstalled();
       if (!installed) {
         _toast('没检测到 Termux。装上它并在里面 pkg install nodejs python git，'
             '就能在手机上跑真正的构建。');
-      } else if (!state.storageAccess) {
+        await _switchTo('priv');
+        return;
+      }
+      if (!state.storageAccess) {
         _toast('建议先去「工作区」授予文件权限，否则 Termux 与 App 看不到同一批文件。');
       }
+      setState(() => _mode = 'termux');
+      return;
     }
-    setState(() => _termux = !_termux);
+    if (_mode == 'termux') {
+      await _switchTo('priv');
+      return;
+    }
+    setState(() => _mode = 'builtin');
+  }
+
+  Future<void> _switchTo(String mode) async {
+    final AppState state = context.read<AppState>();
+    if (mode == 'priv') {
+      await state.refreshPrivilege();
+      if (!state.privilege.privileged) {
+        _toast('没有 root 或 Shizuku。装了 Shizuku 的话去「自动化」页授权，'
+            'root 用户打开 su 授权即可。');
+      }
+    }
+    if (mounted) setState(() => _mode = mode);
   }
 
   void _toast(String text) {
@@ -225,17 +258,24 @@ class _TerminalPageState extends State<TerminalPage> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: _termux
-                ? (en ? 'Termux: on (tap for built-in sh)'
-                      : 'Termux 执行中（点一下回到内置 sh）')
-                : (en ? 'Run with Termux (node/python/git)'
-                      : '用 Termux 跑（node/python/git）'),
+            tooltip: _mode == 'builtin'
+                ? (en ? 'Built-in sh · tap for Termux'
+                      : '内置 sh · 点一下切到 Termux')
+                : (_mode == 'termux'
+                    ? (en ? 'Termux · tap for root/Shizuku'
+                          : 'Termux · 点一下切到 root/Shizuku')
+                    : (en ? 'Privileged shell · tap for built-in sh'
+                          : '特权 shell · 点一下回到内置 sh')),
             icon: Icon(
-              _termux ? Icons.bolt_rounded : Icons.memory_rounded,
+              _mode == 'termux'
+                  ? Icons.bolt_rounded
+                  : (_mode == 'priv'
+                      ? Icons.shield_rounded
+                      : Icons.memory_rounded),
               size: 19,
-              color: _termux ? cs.primary : null,
+              color: _mode == 'builtin' ? null : cs.primary,
             ),
-            onPressed: _toggleTermux,
+            onPressed: _cycleMode,
           ),
           IconButton(
             tooltip: en ? 'Copy transcript' : '复制全部输出',
@@ -277,7 +317,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         _entryView(_entries[i], cs, dark),
                   ),
           ),
-          if (_termux) _modeHint(cs, en),
+          if (_mode != 'builtin') _modeHint(cs, en),
           _quickBar(quick, cs, dark),
           SafeArea(
             top: false,
@@ -392,9 +432,10 @@ class _TerminalPageState extends State<TerminalPage> {
             Text(
               en
                   ? 'Commands run in your real workspace folder with the same PATH '
-                      'the agent uses. Switch on Termux mode for node, python and git.'
-                  : '命令跑在你自己的文件夹里，PATH 与智能体一致；'
-                      '右上角打开 Termux 模式就能用 node、python、git。',
+                      'the agent uses. The icon up top cycles built-in sh → Termux '
+                      '(node/python/git) → privileged shell (pm/svc/input).'
+                  : '命令跑在你自己的文件夹里，PATH 与智能体一致；右上角图标在'
+                      '内置 sh → Termux（node/python/git）→ 特权 shell（pm/svc/input）之间切换。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
@@ -505,13 +546,18 @@ class _TerminalPageState extends State<TerminalPage> {
       color: cs.primary.withOpacity(0.07),
       child: Row(
         children: <Widget>[
-          Icon(Icons.bolt_rounded, size: 13, color: cs.primary),
+          Icon(_mode == 'termux' ? Icons.bolt_rounded : Icons.shield_rounded,
+              size: 13, color: cs.primary),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              en
-                  ? 'Termux mode · same files, full toolchain'
-                  : 'Termux 模式 · 同一批文件，完整工具链',
+              _mode == 'termux'
+                  ? (en
+                      ? 'Termux mode · same files, full toolchain'
+                      : 'Termux 模式 · 同一批文件，完整工具链')
+                  : (en
+                      ? 'Privileged shell · pm / svc / input / settings work here'
+                      : '特权 shell · pm、svc、input、settings 在这里都能用'),
               style: TextStyle(
                 fontSize: 10.5,
                 color: cs.primary.withOpacity(0.85),

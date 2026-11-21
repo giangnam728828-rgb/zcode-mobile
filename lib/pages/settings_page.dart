@@ -11,6 +11,7 @@ import '../platform/device_bridge.dart';
 import '../services/account.dart';
 import '../services/workspace.dart';
 import '../state/app_state.dart';
+import 'automation_page.dart';
 import 'files_page.dart';
 import 'modules_page.dart';
 import 'plugins_page.dart';
@@ -376,6 +377,25 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 );
                 if (mounted && changed == true) setState(() {});
+              },
+              cs: cs,
+            ),
+            const Divider(height: 14),
+            _navRow(
+              icon: Icons.auto_awesome_rounded,
+              label: s.isEnglish ? 'Automation' : '自动化',
+              hint: <String>[
+                '${state.automation?.enabledRules.length ?? 0} '
+                    '${s.isEnglish ? 'rules' : '条规则'}',
+                state.privilege.label,
+                if (state.automation != null)
+                  '${s.isEnglish ? 'today' : '今天'} ${state.automation!.todayRuns}',
+              ].join(' · '),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const AutomationPage()),
+                );
+                if (mounted) setState(() {});
               },
               cs: cs,
             ),

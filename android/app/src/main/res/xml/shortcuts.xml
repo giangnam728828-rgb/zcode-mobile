@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_chat"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_new_chat"
+        android:shortcutLongLabel="@string/shortcut_new_chat_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ai.zcode.zcode_mobile"
+            android:targetClass="ai.zcode.zcode_mobile.MainActivity">
+            <extra android:name="zcode.shortcut" android:value="new_chat" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="automation"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_automation"
+        android:shortcutLongLabel="@string/shortcut_automation_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="ai.zcode.zcode_mobile"
+            android:targetClass="ai.zcode.zcode_mobile.MainActivity">
+            <extra android:name="zcode.shortcut" android:value="automation" />
+        </intent>
+    </shortcut>
+</shortcuts>

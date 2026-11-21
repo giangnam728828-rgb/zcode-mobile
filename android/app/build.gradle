@@ -111,4 +111,9 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     // FileProvider for handing a real file to another app.
     implementation 'androidx.core:core:1.9.0'
+    // Shizuku: run privileged shell commands through the shell uid without
+    // root. 12.x is used deliberately — it is built with Kotlin 1.5 metadata,
+    // which the toolchain pinned by this Flutter release can still read.
+    implementation 'dev.rikka.shizuku:api:12.1.0'
+    implementation 'dev.rikka.shizuku:provider:12.1.0'
 }

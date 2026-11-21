@@ -2,6 +2,14 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="ai.zcode.zcode_mobile">
    <uses-permission android:name="android.permission.INTERNET"/>
+   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+   <uses-permission android:name="android.permission.VIBRATE"/>
+   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+   <!-- Automation needs to find the app a rule wants to launch. -->
+   <uses-permission
+       android:name="android.permission.QUERY_ALL_PACKAGES"
+       tools:ignore="QueryAllPackagesPermission" />
 
    <!-- Real files on the phone: the workspace is a user folder, not a sandbox. -->
    <uses-permission
@@ -25,6 +33,8 @@
        </intent>
        <!-- Termux, for node / python / git builds on device. -->
        <package android:name="com.termux" />
+       <!-- Shizuku, for privileged shell without root. -->
+       <package android:name="moe.shizuku.privileged.api" />
        <intent>
            <action android:name="android.intent.action.VIEW" />
            <data android:mimeType="*/*" />
@@ -55,7 +65,34 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Share sheet: hand text, a snippet or a file to the agent. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+        <!-- Shizuku's binder bridge. Must be declared or the API cannot bind. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            tools:replace="android:exported" />
+        <!-- Runs the `boot` trigger flag after a reboot. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
         <!-- Lets the file page hand a real file to another app (viewer/editor). -->
         <provider
             android:name="androidx.core.content.FileProvider"

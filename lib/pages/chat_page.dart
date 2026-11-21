@@ -16,6 +16,7 @@ import 'files_page.dart';
 import 'modules_page.dart';
 import 'plugins_page.dart';
 import 'settings_page.dart';
+import 'automation_page.dart';
 import 'terminal_page.dart';
 import 'workspace_picker_page.dart';
 
@@ -458,6 +459,9 @@ class _ChatPageState extends State<ChatPage> {
                     : '已把 $n 条早期消息折叠为摘要')),
           ));
         break;
+      case 'automation':
+        await _openAutomation();
+        break;
       case 'workspace':
         await _openWorkspace();
         break;
@@ -581,6 +585,12 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // -------------------------------------------------------------------- pages
+
+  Future<void> _openAutomation() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AutomationPage()),
+    );
+  }
 
   Future<void> _openWorkspace() async {
     final bool? changed = await Navigator.of(context).push<bool>(
@@ -992,6 +1002,9 @@ class _ChatPageState extends State<ChatPage> {
           case 'export':
             _exportMarkdown(convo, s);
             break;
+          case 'automation':
+            await _openAutomation();
+            break;
           case 'workspace':
             await _openWorkspace();
             break;
@@ -1016,6 +1029,8 @@ class _ChatPageState extends State<ChatPage> {
         }
       },
       itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
+        _menuItem('automation', Icons.auto_awesome_rounded,
+            en ? 'Automation' : '自动化'),
         _menuItem('workspace', Icons.smartphone_rounded,
             en ? 'Workspace folder' : '工作区文件夹'),
         _menuItem('files', Icons.folder_open_rounded,

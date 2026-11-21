@@ -64,7 +64,7 @@
 
 ## Agent：真的会在手机上干活
 
-内置 13 个工具，走 Anthropic 兼容的 `tool_use` / `tool_result` 循环；装插件后还会多出 MCP 工具：
+内置 14 个工具，走 Anthropic 兼容的 `tool_use` / `tool_result` 循环；装插件后还会多出 MCP 工具：
 
 | 工具 | 能力 |
 |---|---|
@@ -81,6 +81,7 @@
 | `web_fetch` | 抓 http(s) 页面/接口，HTML 转可读文本 |
 | `todo_write` | 发布任务清单，手机上直接渲染成带进度的计划卡 |
 | `task` | 把独立子任务交给子智能体，它用自己的上下文干活，只回传结论 |
+| `device` | 把手机当手机用：通知、剪贴板、震动、打开应用、电量、音量；root / Shizuku 下再加系统开关、截屏、点击滑动、强制停止、装包授权 |
 
 安全与掌控：
 
@@ -110,6 +111,10 @@
 | 插件市场 | ✅ 16 款内置，支持从链接装 |
 | 工作区位置 | ✅ 手机真实文件夹，可随时切换 |
 | Node / Python / git 运行时 | ✅ Termux 桥：同一目录，完整工具链 |
+| 自动化（定时 / 电量 / 充电 / Wi-Fi / 解锁） | ✅ 规则引擎 + 运行记录 + 模板 |
+| root / Shizuku 提权 | ✅ 系统开关、截屏、模拟点击、pm/svc/cmd |
+| 通知、剪贴板、震动、打开应用 | ✅ 普通权限即可 |
+| 桌面快捷方式 / 分享接收 | ✅ 长按图标直达自动化；其他 App 分享文本给 ZCode |
 
 ## 手机端交互
 
@@ -120,7 +125,7 @@
 - **用量**：每条回答下方显示 in/out token，顶部显示当前上下文估算；上下文过长会自动折叠早期消息；
 - **流畅度**：流式文本按 16ms 合帧、完成后一次性走 Markdown、消息级缓存 + `RepaintBoundary`，滚动不抖。
 
-命令：`/new` `/clear` `/compact` `/undo` `/model` `/files` `/terminal` `/modules` `/plugins` `/export` `/settings` `/help`，外加插件提供的命令。
+命令：`/new` `/clear` `/compact` `/undo` `/model` `/automation` `/files` `/terminal` `/modules` `/plugins` `/export` `/settings` `/help`，外加插件提供的命令。
 
 ## 在手机上真的跑命令
 
@@ -145,6 +150,52 @@ termux-reload-settings
 之后在终端页点亮右上角的闪电图标，`git status`、`node -v`、`python main.py` 都能直接跑。工作区若在应用私有目录（Termux 访问不到），会明确提示你切到内部存储。
 
 脚本放 `.zcode/bin` 后可以直接按名字调用，但有一点要注意：Android 把 `/sdcard` 以 **noexec** 挂载，里面的 `.sh` 不一定能直接执行。用 `sh .zcode/bin/foo.sh` 最稳；命令返回 126/127 时工具输出里也会给出这个提示。
+
+## 自动化：手机才有的触发条件
+
+入口在 **设置 → 自动化**，或者输入 `/automation`。规则由「触发条件 + 一串动作」组成：
+
+| 触发 | 说明 |
+|---|---|
+| 每隔 N 分钟 / 每天几点 | 选星期几，不选就是每天 |
+| 电量低于 / 高于 | 到阈值触发一次，恢复后重新武装，不会反复刷 |
+| 插上电源 / 拔掉电源 | 系统广播即时触发 |
+| 连上 / 断开 Wi-Fi | 可只匹配 SSID 片段 |
+| 点亮屏幕 / 解锁手机 | 适合「回来时看一眼待办」 |
+| 开机后首次打开 | 重启后第一次启动 App 时执行 |
+| 仅手动 | 只在你点播放时跑 |
+
+动作可以串起来，前一个失败就停：
+
+- **智能体**：跑一轮无界面对话（不打断你正在聊的会话），结果写进运行记录；
+- **命令**：内置 sh / Termux / root·Shizuku 三种通道；
+- **通知**：标题 + 正文；
+- **操作手机**：Wi-Fi、移动数据、飞行模式、勿扰、亮度、锁屏、截屏、通知栏、返回/桌面/最近任务、强制停止、清空后台、充电时保持唤醒；
+- **HTTP 请求**：把结果推到自己的服务。
+
+内置 5 个模板（到家拉代码、早间构建检查、解锁看待办、睡前插电清理、每晚收工汇总），点「模板 → 添加」就有一条能跑的规则，再按需改条件。
+
+边界说清楚：规则在 App 进程存活时生效（前台或刚退到后台），不做常驻前台服务——那会多一条常驻通知，也费电。被系统杀掉后不会再跑；开机规则会在下次打开 App 时补执行，因为 Android 10 起不允许后台拉起界面。
+
+## root 与 Shizuku：多出来的那一层
+
+普通权限已经能发通知、读写工作区、跑内置 shell。要让 App 动系统开关、截屏、模拟点击，就需要一个「shell uid」：
+
+| 能力 | 普通 | root | Shizuku |
+|---|---|---|---|
+| 通知 / 剪贴板 / 震动 / 打开应用 / 音量 | ✅ | ✅ | ✅ |
+| Wi-Fi、移动数据、飞行模式、勿扰、亮度 | — | ✅ | ✅ |
+| 截屏、锁屏、通知栏、返回/桌面/最近任务 | — | ✅ | ✅ |
+| 模拟点击、滑动、输入文本 | — | ✅ | ✅ |
+| 强制停止、清空后台、装包、`pm grant` | — | ✅ | ✅ |
+| 任意 `settings put` / `cmd` / `dumpsys` | — | ✅ | ✅ |
+
+怎么开：
+
+- **root**：手机已 root 并装好 `su`，App 第一次执行特权命令时系统会弹授权，允许即可；
+- **Shizuku**：装 [Shizuku](https://shizuku.rikka.app/)，用 adb 或无线调试启动服务，然后在 **自动化 → 权限 → 授权** 点一下；状态栏会显示 `Shizuku`。
+
+终端页右上角图标在 **内置 sh → Termux → 特权 shell** 之间循环，切到盾牌图标时 `pm`、`svc`、`input`、`settings` 都能直接用。智能体的 `device` 工具也会先看当前通道：没有特权时明确告诉你需要开哪一个，而不是假装执行成功。
 
 ## 插件：下载即用
 
@@ -249,10 +300,13 @@ lib/
   agent/commands.dart       斜杠命令定义
   platform/device_bridge.dart 存储权限、卷、Termux 桥（MethodChannel）
   services/workspace.dart   工作区定位、校验、初始化目录结构
+  services/automation.dart  触发器判定、动作执行、规则持久化、模板
+  platform/privilege_bridge.dart root / Shizuku 通道、设备事件流
   state/app_state.dart      会话、回合、队列、压缩、撤销、附件、工作区切换
   pages/files_page.dart     文件浏览 + 编辑器 + 图片预览
   pages/workspace_picker_page.dart 手机上选目录（含权限引导）
-  pages/terminal_page.dart  终端
+  pages/automation_page.dart 规则列表、编辑器、模板与运行记录
+  pages/terminal_page.dart  终端（内置 sh / Termux / 特权）
   pages/modules_page.dart   扩展模块管理
   pages/plugins_page.dart   插件市场 / 已安装 / MCP 三栏
   widgets/composer.dart     命令/文件补全、附件、引用、队列
@@ -265,7 +319,7 @@ lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口
 ## 已验证
 
 - `flutter analyze` → **No issues found**
-- `flutter test` → **47/47 通过**，覆盖：
+- `flutter test` → **59/59 通过**，覆盖：
   - 假模型服务端跑通完整闭环：`bash` 真执行、`tool_result` 回传、拒绝审批不落盘、越权路径被拦；
   - `glob` / `grep` / `mkdir` / `move` / `delete` / `todo_write` 的行为；
   - 回合快照：新建文件被删、改过的文件内容还原；
@@ -278,13 +332,15 @@ lib/dev_preview.dart        仅用于浏览器/真机视觉检查的演示入口
   - MCP 工具以 `mcp__server__tool` 注册进工具链并可执行，重连不重复注册；
   - 子智能体只能派发一层；
   - 插件页点「安装」后文件落盘、按钮变「已安装」；
-  - 工作区：路径归一化、「内部存储」标签、不可写目录被拒、切换后工具链指向新目录、`.zcode/bin` 领先 PATH、沙箱与 `/storage/**` 的放行边界。
+  - 工作区：路径归一化、「内部存储」标签、不可写目录被拒、切换后工具链指向新目录、`.zcode/bin` 领先 PATH、沙箱与 `/storage/**` 的放行边界；
+  - 自动化：间隔 / 每日 / 星期过滤、电量阈值迟滞、Wi-Fi SSID 匹配、事件只触发对应规则、动作按序执行且首个失败即停、规则 JSON 往返、模板可直接用、设备动作到 shell 命令的映射。
 
 ## 路线图
 
 - [ ] 内置静态运行时（不依赖 Termux 也能跑 node / python）
 - [ ] 语音输入与图片 OCR
-- [ ] 屏幕操作（无障碍 / 虚拟显示）
+- [ ] 无障碍服务：无需 root 也能读屏/点按
+- [ ] 常驻前台服务的自动化（进程被杀也能跑）
 
 ## 免责声明
 

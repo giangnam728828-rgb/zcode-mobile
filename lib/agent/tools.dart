@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../platform/privilege_bridge.dart';
+
 enum ToolStatus { pending, running, done, failed, denied }
 
 /// One checklist row emitted by the `todo_write` tool.
@@ -426,6 +428,41 @@ class ToolBox {
           },
         ),
         ToolSpec(
+          'device',
+          'Use the phone as a phone. Without privileges: notify, clipboard, '
+              'vibrate, open_app, apps, battery, volume. With root or Shizuku '
+              'it also drives system switches (wifi/data/airplane/dnd/'
+              'brightness), screenshots, input tap/swipe/text, force-stop, '
+              'package install/grant and raw privileged shell. Call '
+              'action="help" first to see what the current device allows.',
+          <String, dynamic>{
+            'type': 'object',
+            'properties': <String, dynamic>{
+              'action': <String, dynamic>{
+                'type': 'string',
+                'description': 'help | notify | clipboard_get | clipboard_set | '
+                    'vibrate | open_app | apps | battery | volume | key | tap | '
+                    'swipe | text | screenshot | wifi | data | airplane | dnd | '
+                    'brightness | lock | panel | force_stop | current_app | '
+                    'install | grant | shell'
+              },
+              'title': <String, dynamic>{'type': 'string'},
+              'body': <String, dynamic>{'type': 'string'},
+              'text': <String, dynamic>{'type': 'string'},
+              'package': <String, dynamic>{'type': 'string'},
+              'query': <String, dynamic>{'type': 'string'},
+              'key': <String, dynamic>{'type': 'string'},
+              'value': <String, dynamic>{'type': 'string'},
+              'command': <String, dynamic>{'type': 'string'},
+              'x': <String, dynamic>{'type': 'integer'},
+              'y': <String, dynamic>{'type': 'integer'},
+              'x2': <String, dynamic>{'type': 'integer'},
+              'y2': <String, dynamic>{'type': 'integer'},
+            },
+            'required': <String>['action'],
+          },
+        ),
+        ToolSpec(
           'task',
           'Delegate a self-contained sub-task to a child agent. The child has '
               'its own context, the same workspace and tools, and returns only '
@@ -592,6 +629,8 @@ class ToolBox {
         return _todo(call);
       case 'task':
         return _task(call);
+      case 'device':
+        return _device(call);
       default:
         final ExternalTool? ext = _external[call.name];
         if (ext != null) {
@@ -608,12 +647,221 @@ class ToolBox {
   /// Shell edits and destructive commands always ask first.
   bool requiresApproval(ToolCall call) {
     if (call.name == 'delete_file' || call.name == 'move_file') return true;
+    if (call.name == 'device') {
+      const Set<String> risky = <String>{
+        'shell',
+        'install',
+        'grant',
+        'force_stop',
+        'airplane',
+        'data',
+      };
+      return risky.contains('${call.input['action'] ?? ''}');
+    }
     if (call.name != 'bash') return false;
     final String cmd = '${call.input['command'] ?? ''}';
     return RegExp(r'(^|\s|\|)(rm|mv|dd|mkfs|chmod|chown|kill|pkill|su|sudo|reboot)\b')
             .hasMatch(cmd) ||
         cmd.contains('>') && !cmd.contains('>>');
   }
+
+  // --------------------------------------------------------------- device
+
+  /// The phone-only tool. Anything that needs the shell uid goes through
+  /// [PrivilegeBridge]; the rest uses ordinary Android APIs.
+  Future<String> _device(ToolCall call) async {
+    final String action = '${call.input['action'] ?? ''}'.trim();
+    if (action.isEmpty) return 'Missing action. Call action="help".';
+    final PrivStatus st = PrivilegeBridge.status;
+
+    switch (action) {
+      case 'help':
+        return _deviceHelp(st);
+      case 'notify':
+        final bool ok = await PrivilegeBridge.notify(
+          '${call.input['title'] ?? 'ZCode'}',
+          '${call.input['body'] ?? ''}',
+          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        );
+        return ok ? 'Notification shown.' : 'Notification failed (permission?).';
+      case 'clipboard_get':
+        final String text = await PrivilegeBridge.clipboardGet();
+        return text.isEmpty ? '(clipboard is empty)' : _clip(text);
+      case 'clipboard_set':
+        final bool ok =
+            await PrivilegeBridge.clipboardSet('${call.input['text'] ?? ''}');
+        return ok ? 'Copied.' : 'Clipboard write failed.';
+      case 'vibrate':
+        return await PrivilegeBridge.vibrate(200) ? 'Vibrated.' : 'No vibrator.';
+      case 'open_app':
+        final bool ok =
+            await PrivilegeBridge.openApp('${call.input['package'] ?? ''}');
+        return ok ? 'Launched.' : 'App not found or has no launcher.';
+      case 'apps':
+        final List<Map<String, String>> list =
+            await PrivilegeBridge.apps(query: '${call.input['query'] ?? ''}');
+        if (list.isEmpty) return 'No matching apps.';
+        return list
+            .take(40)
+            .map((Map<String, String> a) => '${a['label']} — ${a['package']}')
+            .join('\n');
+      case 'battery':
+        final Map<String, dynamic> b = await PrivilegeBridge.battery();
+        if (b.isEmpty) return 'Battery info unavailable.';
+        return 'level: ${b['level']}%\n'
+            'charging: ${b['charging']}\n'
+            'temperature: ${b['temperature']}°C\n'
+            'screen on: ${b['screenOn']}\n'
+            'power save: ${b['powerSave']}';
+      case 'volume':
+        final String dir = '${call.input['value'] ?? 'up'}';
+        final int delta = dir == 'down'
+            ? -1
+            : (dir == 'mute' ? -15 : (dir == 'max' ? 15 : 1));
+        final Map<String, dynamic> v =
+            await PrivilegeBridge.volume('music', delta: delta);
+        return 'volume: ${v['level']}/${v['max']}';
+    }
+
+    if (!st.privileged) {
+      return 'This action needs root or Shizuku. Current channel: ${st.label}. '
+          'Ask the user to enable one in Settings → 自动化与权限.';
+    }
+
+    String command = '';
+    switch (action) {
+      case 'key':
+        final String key = '${call.input['key'] ?? ''}'.trim();
+        final String code = _keyCode(key);
+        if (code.isEmpty) return 'Unknown key "$key".';
+        command = 'input keyevent $code';
+        break;
+      case 'tap':
+        command = 'input tap ${call.input['x'] ?? 0} ${call.input['y'] ?? 0}';
+        break;
+      case 'swipe':
+        command = 'input swipe ${call.input['x'] ?? 0} ${call.input['y'] ?? 0} '
+            '${call.input['x2'] ?? 0} ${call.input['y2'] ?? 0} 300';
+        break;
+      case 'text':
+        final String raw = '${call.input['text'] ?? ''}';
+        if (raw.isEmpty) return 'Nothing to type.';
+        command = 'input text ${_shellQuote(raw.replaceAll(' ', '%s'))}';
+        break;
+      case 'screenshot':
+        final String stamp = DateTime.now().millisecondsSinceEpoch.toString();
+        command = 'screencap -p "/sdcard/zcode-shot-$stamp.png"';
+        break;
+      case 'wifi':
+        command = 'svc wifi ${'${call.input['value'] ?? 'on'}' == 'off' ? 'disable' : 'enable'}';
+        break;
+      case 'data':
+        command = 'svc data ${'${call.input['value'] ?? 'on'}' == 'off' ? 'disable' : 'enable'}';
+        break;
+      case 'airplane':
+        final bool on = '${call.input['value'] ?? 'on'}' != 'off';
+        command = 'settings put global airplane_mode_on ${on ? 1 : 0}; '
+            'am broadcast -a android.intent.action.AIRPLANE_MODE --ez state $on';
+        break;
+      case 'dnd':
+        command =
+            'cmd notification set_dnd ${'${call.input['value'] ?? 'on'}' == 'off' ? 'off' : 'on'}';
+        break;
+      case 'brightness':
+        command = 'settings put system screen_brightness '
+            '${call.input['value'] ?? 128}';
+        break;
+      case 'lock':
+        command = 'input keyevent 26';
+        break;
+      case 'panel':
+        command = 'cmd statusbar expand-notifications';
+        break;
+      case 'force_stop':
+        final String pkg = '${call.input['package'] ?? ''}';
+        if (pkg.isEmpty) return 'Missing package.';
+        command = 'am force-stop $pkg';
+        break;
+      case 'current_app':
+        command = "dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp'";
+        break;
+      case 'install':
+        final String path = _resolve('${call.input['package'] ?? ''}');
+        command = 'pm install -r ${_shellQuote(path)}';
+        break;
+      case 'grant':
+        final String pkg = '${call.input['package'] ?? ''}';
+        final String perm = '${call.input['value'] ?? ''}';
+        if (pkg.isEmpty || perm.isEmpty) return 'Need package and value=permission.';
+        command = 'pm grant $pkg $perm';
+        break;
+      case 'shell':
+        command = '${call.input['command'] ?? ''}'.trim();
+        if (command.isEmpty) return 'Missing command.';
+        break;
+      default:
+        return 'Unknown action "$action". Call action="help".';
+    }
+
+    final PrivResult r = await PrivilegeBridge.run(command, timeout: 30);
+    final String out = r.text;
+    if (action == 'screenshot' && r.ok) {
+      return 'Screenshot saved to /sdcard (open it from the file page).';
+    }
+    return _clip(out);
+  }
+
+  static String _deviceHelp(PrivStatus st) {
+    final StringBuffer b = StringBuffer();
+    b.writeln('channel: ${st.label}');
+    b.writeln('root: ${st.root} · shizuku: ${st.shizuku} '
+        '· granted: ${st.shizukuGranted}');
+    b.writeln('notifications: ${st.notifications} · '
+        'write settings: ${st.writeSettings} · dnd: ${st.dndAccess}');
+    b.writeln('');
+    b.writeln('always available: notify, clipboard_get, clipboard_set,');
+    b.writeln('  vibrate, open_app, apps, battery, volume');
+    if (st.privileged) {
+      b.writeln('unlocked: wifi, data, airplane, dnd, brightness, lock, panel,');
+      b.writeln('  key, tap, swipe, text, screenshot, current_app, force_stop,');
+      b.writeln('  install, grant, shell');
+    } else {
+      b.writeln('locked (needs root or Shizuku): wifi, data, airplane, dnd,');
+      b.writeln('  brightness, lock, panel, key, tap, swipe, text, screenshot,');
+      b.writeln('  current_app, force_stop, install, grant, shell');
+    }
+    return b.toString().trim();
+  }
+
+  static String _keyCode(String name) {
+    const Map<String, String> keys = <String, String>{
+      'home': '3',
+      'back': '4',
+      'call': '5',
+      'endcall': '6',
+      'volume_up': '24',
+      'volume_down': '25',
+      'power': '26',
+      'camera': '27',
+      'menu': '82',
+      'notification': '83',
+      'search': '84',
+      'play': '126',
+      'pause': '127',
+      'enter': '66',
+      'delete': '67',
+      'tab': '61',
+      'space': '62',
+      'escape': '111',
+      'recents': '187',
+    };
+    if (keys.containsKey(name.toLowerCase())) return keys[name.toLowerCase()]!;
+    if (RegExp(r'^[0-9]+$').hasMatch(name)) return name;
+    return '';
+  }
+
+  static String _shellQuote(String value) =>
+      "'${value.replaceAll("'", "'\\''")}'";
 
   // -------------------------------------------------------------- execution
 

@@ -118,4 +118,28 @@ class Store {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     return prefs.getStringList(_kRecentWorkspaces) ?? <String>[];
   }
+
+  // --------------------------------------------------------------- automation
+
+  static const String _kAutomation = 'zcode.automation.v1';
+
+  static Future<String?> loadAutomation() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_kAutomation);
+  }
+
+  static Future<void> saveAutomation(String raw) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kAutomation, raw);
+  }
+
+  // ------------------------------------------------------------------- flags
+
+  /// One-shot flags written by the native side (currently only `boot`).
+  static Future<bool> takeFlag(String key) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final bool value = prefs.getBool('zcode.flag.$key') ?? false;
+    if (value) await prefs.remove('zcode.flag.$key');
+    return value;
+  }
 }

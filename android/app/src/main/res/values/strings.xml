@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shortcut_new_chat">新建会话</string>
+    <string name="shortcut_new_chat_long">开一个新会话继续干活</string>
+    <string name="shortcut_automation">自动化</string>
+    <string name="shortcut_automation_long">打开自动化规则</string>
+</resources>
