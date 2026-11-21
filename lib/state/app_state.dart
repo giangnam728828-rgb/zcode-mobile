@@ -77,6 +77,13 @@ class AppState extends ChangeNotifier {
   /// Automation rules and their history. Created in [init].
   AutomationEngine? automation;
 
+  /// Text handed over by another app's share sheet, waiting to be put in the
+  /// composer.
+  String? pendingDraft;
+
+  /// A route requested by a launcher shortcut (`automation`).
+  String? pendingRoute;
+
   final AccountService _account = AccountService();
   ToolBox? _toolbox;
   AgentRunner? _runner;
@@ -93,6 +100,8 @@ class AppState extends ChangeNotifier {
   // ---------------------------------------------------------------- lifecycle
 
   Future<void> init() async {
+    DeviceBridge.init();
+    DeviceBridge.onIntent = _handleIntent;
     config = await Store.loadConfig() ?? AppConfig.empty;
     session = await _account.restore();
     await DeviceBridge.refresh();
@@ -105,6 +114,7 @@ class AppState extends ChangeNotifier {
     await _bindExtensions();
     privilege = await PrivilegeBridge.refresh();
     automation = AutomationEngine(runner: _runAutomationAction);
+    automation!.onFinished = _notifyRuleResult;
     await automation!.load();
     automation!.start();
     _listenDeviceEvents();
@@ -122,6 +132,44 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     unawaited(refreshFileIndex());
     unawaited(_runBootRules());
+    final Map<String, dynamic>? early = DeviceBridge.takePendingIntent();
+    if (early != null) _handleIntent(early);
+  }
+
+  /// Launcher shortcuts and the share sheet land here.
+  void _handleIntent(Map<String, dynamic> data) {
+    final String kind = '${data['kind'] ?? ''}';
+    if (kind == 'shortcut') {
+      final String value = '${data['value'] ?? ''}';
+      if (value == 'automation') {
+        pendingRoute = 'automation';
+        notifyListeners();
+      } else if (value == 'new_chat') {
+        newConversation();
+      }
+      return;
+    }
+    if (kind == 'share') {
+      final String text = '${data['value'] ?? ''}'.trim();
+      if (text.isEmpty) return;
+      // A share is a new thought, not a continuation: open a clean session and
+      // drop the text in the box so nothing is sent without the user's word.
+      newConversation();
+      pendingDraft = text;
+      notifyListeners();
+    }
+  }
+
+  String? takeDraft() {
+    final String? d = pendingDraft;
+    pendingDraft = null;
+    return d;
+  }
+
+  String? takeRoute() {
+    final String? r = pendingRoute;
+    pendingRoute = null;
+    return r;
   }
 
   /// First run: suggest `Internal storage/ZCode`, but honour whatever the user
@@ -1453,6 +1501,24 @@ class AppState extends ChangeNotifier {
   }
 
   // ------------------------------------------------------------ automation
+
+  /// A rule can ask for a notification after it runs; failures always notify,
+  /// because a silent failure is worse than a noisy one.
+  Future<void> _notifyRuleResult(
+    AutomationRule rule,
+    bool ok,
+    String detail,
+  ) async {
+    // Failures always surface; successes only when the switch is on.
+    if (!rule.notify && ok) return;
+    final String first = detail.split('\n').first;
+    final String body = first.length > 180 ? '${first.substring(0, 180)}…' : first;
+    await PrivilegeBridge.notify(
+      '${rule.name}${ok ? '' : ' · 失败'}',
+      body.isEmpty ? (ok ? '已执行' : '执行失败') : body,
+      id: rule.id.hashCode & 0x7fff,
+    );
+  }
 
   Future<String> _runAutomationAction(
     AutomationRule rule,

@@ -92,6 +92,16 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final AppState state = context.watch<AppState>();
+    // Text shared from another app lands here; filling the box (rather than
+    // sending) keeps the decision with the user.
+    if (state.pendingDraft != null) {
+      final String draft = state.takeDraft() ?? '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _input.text = draft;
+        _input.selection = TextSelection.collapsed(offset: draft.length);
+      });
+    }
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
     final S s = widget.s;

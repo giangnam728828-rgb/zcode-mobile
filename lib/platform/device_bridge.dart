@@ -54,6 +54,37 @@ class DeviceBridge {
   static const MethodChannel _channel = MethodChannel('ai.zcode/device');
   static DeviceInfo _info = const DeviceInfo();
   static bool _probed = false;
+  static bool _handler = false;
+  static Map<String, dynamic>? _pending;
+
+  /// Called when a launcher shortcut or a share-sheet item arrives.
+  static void Function(Map<String, dynamic>)? onIntent;
+
+  /// Installs the inbound channel once. The native side also caches the launch
+  /// intent, because it can arrive before `AppState.init` finishes.
+  static void init() {
+    if (!isAndroid || _handler) return;
+    _handler = true;
+    _channel.setMethodCallHandler((MethodCall call) async {
+      if (call.method != 'intent') return null;
+      final Object? args = call.arguments;
+      if (args is Map) {
+        final Map<String, dynamic> map = <String, dynamic>{
+          for (final Object? key in args.keys) '\$key': args[key],
+        };
+        _pending = map;
+        onIntent?.call(map);
+      }
+      return null;
+    });
+  }
+
+  /// Removes and returns an intent that arrived before a listener existed.
+  static Map<String, dynamic>? takePendingIntent() {
+    final Map<String, dynamic>? p = _pending;
+    _pending = null;
+    return p;
+  }
 
   static bool get isAndroid {
     if (kIsWeb) return false;

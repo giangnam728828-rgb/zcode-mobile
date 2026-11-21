@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
+import 'automation_page.dart';
 import 'chat_page.dart';
 import 'sessions_drawer.dart';
 
@@ -47,6 +48,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final AppState state = context.watch<AppState>();
     final S s = S.of(state.config?.language);
+    // A launcher shortcut asks for a page; the shell owns the navigator.
+    if (state.pendingRoute != null) {
+      final String? route = state.takeRoute();
+      if (route == 'automation') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AutomationPage()),
+          );
+        });
+      }
+    }
     final double width = MediaQuery.of(context).size.width;
     final bool wide = width >= HomeShell.breakpoint;
 

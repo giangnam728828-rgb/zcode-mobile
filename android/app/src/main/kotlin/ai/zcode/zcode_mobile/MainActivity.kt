@@ -80,7 +80,14 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 try {
                     when (call.method) {
-                        "capabilities" -> result.success(Privilege.capabilities(this))
+                        "capabilities" -> {
+                            // Probing su blocks for up to 4s while the grant
+                            // dialog is up; never do that on the UI thread.
+                            worker.execute {
+                                val caps = Privilege.capabilities(this)
+                                main.post { result.success(caps) }
+                            }
+                        }
                         "hasRoot" -> {
                             val force = call.argument<Boolean>("force") ?: false
                             worker.execute {
@@ -121,9 +128,13 @@ class MainActivity : FlutterActivity() {
                         "openApp" -> result.success(
                             Privilege.openApp(this, call.argument<String>("target") ?: "")
                         )
-                        "apps" -> result.success(
-                            Privilege.installedApps(this, call.argument<String>("query") ?: "")
-                        )
+                        "apps" -> {
+                            val query = call.argument<String>("query") ?: ""
+                            worker.execute {
+                                val list = Privilege.installedApps(this, query)
+                                main.post { result.success(list) }
+                            }
+                        }
                         "battery" -> result.success(Privilege.battery(this))
                         "volume" -> result.success(
                             Privilege.volume(

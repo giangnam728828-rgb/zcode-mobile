@@ -376,6 +376,11 @@ class AutomationEngine extends ChangeNotifier {
   final Future<String> Function(AutomationRule rule, AutomationAction action)
       runner;
 
+  /// Called after every run so the app can raise a system notification. Kept
+  /// as a hook so the engine itself stays free of platform imports.
+  Future<void> Function(AutomationRule rule, bool ok, String detail)?
+      onFinished;
+
   final List<AutomationRule> rules = <AutomationRule>[];
   final List<AutomationLog> logs = <AutomationLog>[];
 
@@ -711,6 +716,11 @@ class AutomationEngine extends ChangeNotifier {
     }
     await _persist();
     notifyListeners();
+    if (onFinished != null) {
+      try {
+        await onFinished!(rule, ok, text);
+      } catch (_) {}
+    }
     return text.isEmpty ? (ok ? '完成' : '失败') : text;
   }
 
