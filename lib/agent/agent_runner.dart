@@ -18,6 +18,9 @@ class AgentRunner {
     this.maxTokens = 8192,
     this.maxSteps = 20,
     this.temperature = 0.7,
+    this.provider,
+    this.environment = 'local',
+    this.tokenRefreshed = false,
   });
 
   final String baseUrl;
@@ -27,6 +30,13 @@ class AgentRunner {
   final int maxTokens;
   final int maxSteps;
   final double temperature;
+
+  /// Error-context fields (总方案 P1-1): the exception a turn throws carries
+  /// the provider id, the execution environment and whether a token refresh
+  /// already happened, so quota problems are never misread as plain 429s.
+  final String? provider;
+  final String environment;
+  final bool tokenRefreshed;
 
   http.Client? _active;
   bool _cancelled = false;
@@ -132,6 +142,19 @@ class AgentRunner {
         'is_error': call.status == ToolStatus.failed,
       };
 
+  http.Request _buildRequest(String body) {
+    final http.Request req = http.Request('POST', _uri);
+    req.headers.addAll(<String, String>{
+      'x-api-key': token,
+      'authorization': 'Bearer $token',
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'accept': 'text/event-stream',
+    });
+    req.body = body;
+    return req;
+  }
+
   Future<_StepResult> _streamStep({
     required List<Map<String, dynamic>> wire,
     required String systemPrompt,
@@ -142,15 +165,7 @@ class AgentRunner {
   }) async {
     final http.Client client = http.Client();
     _active = client;
-    final http.Request req = http.Request('POST', _uri);
-    req.headers.addAll(<String, String>{
-      'x-api-key': token,
-      'authorization': 'Bearer $token',
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'accept': 'text/event-stream',
-    });
-    req.body = jsonEncode(<String, dynamic>{
+    final String payload = jsonEncode(<String, dynamic>{
       'model': model,
       'max_tokens': maxTokens,
       'temperature': temperature,
@@ -161,24 +176,67 @@ class AgentRunner {
     });
 
     http.StreamedResponse? resp;
+    // 连接层重试：每次尝试都重新构建请求对象。package:http 的 Request 只能
+    // send 一次，复用旧对象会让第二次 send 直接抛 StateError，重试从未真正
+    // 生效过。
     int attempt = 0;
     while (true) {
       if (_cancelled) break;
+      resp = null;
       try {
-        resp = await client.send(req);
-        break;
+        resp = await client.send(_buildRequest(payload));
       } catch (e) {
         attempt++;
         final bool transient = e is HttpException ||
             e is SocketException ||
             e is TimeoutException ||
             e is http.ClientException;
-        if (_cancelled || !transient || attempt >= 3) {
+        if (_cancelled) break;
+        if (!transient || attempt >= 3) {
           _active = null;
-          throw AgentException(0, '网络连接失败：$e');
+          throw AgentException(
+            0,
+            '网络连接失败：$e',
+            kind: AgentErrorKind.network,
+            model: model,
+            provider: provider,
+            environment: environment,
+            tokenRefreshed: tokenRefreshed,
+          );
         }
         await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+        continue;
       }
+
+      // HTTP 错误按原因分类。额度耗尽、凭证无效等不可恢复错误立即抛出，绝不
+      // 自动重试；只有网关类瞬时错误（502/503/504）允许一次重建请求的退避重试。
+      if (resp.statusCode != 200) {
+        final String body = await resp.stream.bytesToString();
+        final String? requestId = resp.headers['x-request-id'];
+        final AgentErrorKind kind = AgentException.classifyError(resp.statusCode, body);
+        final bool gatewayTransient = kind == AgentErrorKind.server &&
+            (resp.statusCode == 502 ||
+                resp.statusCode == 503 ||
+                resp.statusCode == 504);
+        if (gatewayTransient && attempt < 2) {
+          attempt++;
+          await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+          continue;
+        }
+        _active = null;
+        throw AgentException(
+          resp.statusCode,
+          body,
+          kind: kind,
+          errorCode: AgentException.errorCodeOf(body),
+          requestId: requestId,
+          model: model,
+          provider: provider,
+          environment: environment,
+          tokenRefreshed: tokenRefreshed,
+        );
+      }
+      break;
     }
     if (_cancelled) {
       _active = null;
@@ -186,12 +244,15 @@ class AgentRunner {
     }
     if (resp == null) {
       _active = null;
-      throw AgentException(0, '网络连接失败，请检查网络后重试');
-    }
-    if (resp.statusCode != 200) {
-      final String body = await resp.stream.bytesToString();
-      _active = null;
-      throw AgentException(resp.statusCode, body);
+      throw AgentException(
+        0,
+        '网络连接失败，请检查网络后重试',
+        kind: AgentErrorKind.network,
+        model: model,
+        provider: provider,
+        environment: environment,
+        tokenRefreshed: tokenRefreshed,
+      );
     }
 
     final StringBuffer text = StringBuffer();
@@ -281,7 +342,16 @@ class AgentRunner {
         final Map<String, dynamic>? err =
             (ev['error'] as Map?)?.cast<String, dynamic>();
         _active = null;
-        throw AgentException(0, '${err?['message'] ?? 'stream error'}');
+        throw AgentException(
+          0,
+          '${err?['message'] ?? 'stream error'}',
+          kind: AgentErrorKind.stream,
+          errorCode: AgentException.errorCodeOf(jsonEncode(ev)),
+          model: model,
+          provider: provider,
+          environment: environment,
+          tokenRefreshed: tokenRefreshed,
+        );
       }
     }
 
@@ -303,23 +373,165 @@ class _StepResult {
   final String stopReason;
 }
 
+/// Why a turn failed. The distinction matters because the recovery is
+/// different: quota/auth failures never retry, rate limits need waiting,
+/// gateway errors may rebuild the request once.
+enum AgentErrorKind {
+  network,
+  quotaExhausted,
+  rateLimited,
+  authInvalid,
+  noModelAccess,
+  badRequest,
+  server,
+  stream,
+}
+
 class AgentException implements Exception {
-  AgentException(this.statusCode, this.body);
+  AgentException(
+    this.statusCode,
+    this.body, {
+    this.kind = AgentErrorKind.server,
+    this.errorCode,
+    this.requestId,
+    this.model,
+    this.provider,
+    this.environment = 'local',
+    this.tokenRefreshed = false,
+  });
+
   final int statusCode;
   final String body;
+  final AgentErrorKind kind;
+  final String? errorCode;
+  final String? requestId;
+  final String? model;
+  final String? provider;
+  final String environment;
+  final bool tokenRefreshed;
+
+  /// Pulls the server-side error code out of a response body, handling both
+  /// the Anthropic shape (`error.code`) and the BigModel shape (`code`).
+  static String? errorCodeOf(String body) {
+    try {
+      final Object? v = jsonDecode(body);
+      if (v is! Map) return null;
+      final Object? err = v['error'];
+      if (err is Map) {
+        final Object? c = err['code'];
+        if (c != null && '$c'.isNotEmpty) return '$c';
+      }
+      final Object? code = v['code'];
+      if (code != null && '$code'.isNotEmpty) return '$code';
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Maps an HTTP status + body onto a kind. Known server codes are checked in
+  /// the body first: a 429 with an exhausted-quota code is quota, not a rate
+  /// limit, and the two must not be conflated (总方案 P1-1).
+  static AgentErrorKind classifyError(int statusCode, String body) {
+    final String? code = errorCodeOf(body);
+    final String hay =
+        '$code ${errorCodeText(body)}'.toLowerCase();
+    bool any(List<String> needles) => needles.any(hay.contains);
+    if (any(<String>['1113', '1305', 'insufficient', 'quota', 'arrears', '余额', '欠费', '额度不足', '已用尽', '耗尽'])) {
+      return AgentErrorKind.quotaExhausted;
+    }
+    switch (statusCode) {
+      case 401:
+      case 403:
+        // Some providers answer an exhausted quota with 403 — check the body
+        // before blaming the credential.
+        if (any(<String>['1113', '1305', 'insufficient', 'quota', 'arrears', '余额', '欠费', '额度'])) {
+          return AgentErrorKind.quotaExhausted;
+        }
+        if (any(<String>['1002', '1004', 'invalid', 'expired', '无效', '过期', '未授权'])) {
+          return AgentErrorKind.authInvalid;
+        }
+        return statusCode == 403
+            ? AgentErrorKind.noModelAccess
+            : AgentErrorKind.authInvalid;
+      case 402:
+        return AgentErrorKind.quotaExhausted;
+      case 429:
+        return AgentErrorKind.rateLimited;
+      case 400:
+      case 404:
+      case 413:
+      case 422:
+        return AgentErrorKind.badRequest;
+      default:
+        return statusCode >= 500
+            ? AgentErrorKind.server
+            : AgentErrorKind.badRequest;
+    }
+  }
+
+  static String errorCodeText(String body) {
+    final Object? v = body.isEmpty ? null : _tryDecode(body);
+    if (v is Map) {
+      final Object? err = v['error'];
+      if (err is Map && err['message'] is String) return err['message'] as String;
+      if (v['msg'] is String) return v['msg'] as String;
+      if (v['message'] is String) return v['message'] as String;
+    }
+    return body.length > 300 ? body.substring(0, 300) : body;
+  }
+
+  static Object? _tryDecode(String body) {
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Structured one-line detail so every failure carries what support/telemetry
+  /// needs: status, server code and message, request id, model, provider,
+  /// execution environment, and whether a refresh already happened.
+  String get detail {
+    final List<String> parts = <String>[
+      if (model != null) '模型 ${model!}',
+      if (provider != null) 'Provider ${provider!}',
+      '环境 $environment',
+      if (statusCode > 0) 'HTTP $statusCode',
+      if (errorCode != null) '错误码 $errorCode',
+      if (requestId != null) '请求ID $requestId',
+      if (tokenRefreshed) '本轮已刷新凭证',
+    ];
+    return parts.join(' · ');
+  }
 
   String get message {
-    if (statusCode == 401 || statusCode == 403) {
-      return '登录状态已失效（$statusCode），请在设置里重新登录';
+    final String server = errorCodeText(body);
+    final String serverLine = server.trim().isEmpty ? '' : '\n服务端信息：$server';
+    switch (kind) {
+      case AgentErrorKind.network:
+        return body.isEmpty ? '网络请求失败，请重试' : body;
+      case AgentErrorKind.quotaExhausted:
+        return '套餐额度已用尽（$detail）。重试不会恢复额度，'
+            '请等待套餐刷新或更换账号。$serverLine';
+      case AgentErrorKind.rateLimited:
+        return '请求过于频繁（429），请稍候几秒再试。'
+            '这不是额度耗尽。$serverLine\n$detail';
+      case AgentErrorKind.authInvalid:
+        return '模型凭证无效或已过期（$detail）。'
+            '请到 设置 › 账号 重新签发，或重新登录。$serverLine';
+      case AgentErrorKind.noModelAccess:
+        return '当前账号无权调用该模型（$detail）。'
+            '请确认套餐支持 $model。$serverLine';
+      case AgentErrorKind.badRequest:
+        final String snippet = body.length > 240 ? body.substring(0, 240) : body;
+        return '请求被拒绝（$detail）：$snippet';
+      case AgentErrorKind.server:
+        final String snippet = body.length > 240 ? body.substring(0, 240) : body;
+        return '服务端异常（$detail）：$snippet';
+      case AgentErrorKind.stream:
+        return '流式响应中断：$body\n$detail';
     }
-    if (statusCode == 429) {
-      return '额度不足或请求过于频繁（429）';
-    }
-    if (statusCode == 0) {
-      return body.isEmpty ? '网络请求失败，请重试' : body;
-    }
-    final String snippet = body.length > 240 ? body.substring(0, 240) : body;
-    return '请求失败（$statusCode）：$snippet';
   }
 
   @override
