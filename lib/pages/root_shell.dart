@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../models/app_config.dart';
+import '../remote/remote_view_page.dart';
 import '../state/app_state.dart';
 import '../state/dock_visibility.dart';
 import '../state/glass_probe.dart';
@@ -44,7 +45,7 @@ class _RootShellState extends State<RootShell>
     value: 1,
   );
 
-  late int _index = widget.initialIndex.clamp(0, 3);
+  late int _index = widget.initialIndex.clamp(0, 4);
 
   /// Only alive while the user has glass on `auto`; see [_syncProbe].
   GlassProbe? _probe;
@@ -161,6 +162,10 @@ class _RootShellState extends State<RootShell>
         embedded: true,
         onOpenSessions: () => _scaffold.currentState?.openDrawer(),
       ),
+      // Desktop remote lives in the dock, next to Chat: the official page
+      // carries the whole remote surface (总方案 P0-5), kept alive by the
+      // IndexedStack so switching tabs never reloads it.
+      const RemoteViewPage(embedded: true),
       const FilesPage(embedded: true),
       const TerminalPage(embedded: true),
       const SettingsPage(embedded: true),
@@ -171,6 +176,11 @@ class _RootShellState extends State<RootShell>
         icon: Icons.chat_bubble_outline_rounded,
         activeIcon: Icons.chat_bubble_rounded,
         label: s.isEnglish ? 'Chat' : '对话',
+      ),
+      DockItem(
+        icon: Icons.computer_outlined,
+        activeIcon: Icons.computer_rounded,
+        label: s.isEnglish ? 'Remote' : '远程',
       ),
       DockItem(
         icon: Icons.folder_outlined,

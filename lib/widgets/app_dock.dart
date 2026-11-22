@@ -17,8 +17,9 @@ class DockItem {
 
 /// Floating bottom navigation, one glass pane with a liquid selection pill.
 ///
-/// Four destinations only. Automation lives inside Settings — a fifth tab for
-/// a feature you touch twice a week costs a permanent 58dp of every screen.
+/// Five destinations: Chat, Desktop remote, Files, Shell, Settings. The remote
+/// tab earns its slot next to Chat (总方案 P0-5) — it is a daily surface, and
+/// automation still lives inside Settings where configuration belongs.
 class AppDock extends StatelessWidget {
   const AppDock({
     Key? key,
