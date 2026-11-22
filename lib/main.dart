@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,7 +8,6 @@ import 'pages/login_page.dart';
 import 'pages/splash_page.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
-import 'theme/tokens.dart';
 
 void main() {
   runApp(const ZCodeApp());
@@ -60,44 +57,41 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  /// Floor for the splash, not a delay before it: `AppState.init()` runs in
-  /// parallel, so the app leaves at whichever finishes last.
-  static const Duration _floor = Duration(milliseconds: 520);
-
-  bool _floorElapsed = false;
+  bool _introDone = false;
   bool _reducedMotion = false;
-  Timer? _floorTimer;
 
   @override
   void initState() {
     super.initState();
     _reducedMotion = WidgetsBinding
         .instance.platformDispatcher.accessibilityFeatures.disableAnimations;
-    if (_reducedMotion) {
-      _floorElapsed = true;
-    } else {
-      _floorTimer = Timer(_floor, () {
-        if (mounted) setState(() => _floorElapsed = true);
-      });
-    }
+    // Reduced motion shows a static lockup and leaves as soon as init is
+    // ready: no timeline and no artificial floor.
+    if (_reducedMotion) _introDone = true;
   }
 
-  @override
-  void dispose() {
-    _floorTimer?.cancel();
-    super.dispose();
+  void _onIntroDone() {
+    if (mounted) setState(() => _introDone = true);
   }
 
   @override
   Widget build(BuildContext context) {
     final AppState state = context.watch<AppState>();
-    final bool splash = !state.ready || !_floorElapsed;
+    final bool splash = !state.ready || !_introDone;
+
+    // The splash fades its own content out before calling _onIntroDone, so
+    // this 160ms transition only hands the background over to the page. The
+    // logo is never on screen while the sign-in page is appearing.
     return AnimatedSwitcher(
-      duration: _reducedMotion ? Duration.zero : AppTokens.base,
+      duration: _reducedMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 160),
       child: splash
           ? BrandSplash(
               key: const ValueKey<String>('splash'),
+              ready: state.ready,
               animate: !_reducedMotion,
+              onDone: _onIntroDone,
             )
           : state.session != null
               ? const HomeShell(key: ValueKey<String>('home'))

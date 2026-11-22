@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ draws a system splash icon from android:icon before Flutter's
+     first frame. Hiding it leaves one brand sequence only: the Flutter boot
+     sequence below. It is a transparent 1dp shape, not a new app icon. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <size android:width="1dp" android:height="1dp" />
+    <solid android:color="@android:color/transparent" />
+</shape>

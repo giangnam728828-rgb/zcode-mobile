@@ -99,9 +99,55 @@ void main() {
     expect(scrollable.position.maxScrollExtent, lessThanOrEqualTo(1.0));
   });
 
+  testWidgets('splash holds the lockup until ready, then leaves once',
+      (WidgetTester tester) async {
+    // Unpumped animation: ready=false must not start the exit timer, so the
+    // app cannot drop onto the sign-in page before init has finished.
+    bool done = false;
+    await tester.pumpWidget(MaterialApp(
+      home: BrandSplash(
+        ready: false,
+        animate: true,
+        onDone: () => done = true,
+      ),
+    ));
+    await tester.pump();
+    expect(find.byType(AppIconTile), findsOneWidget);
+    expect(find.text('zcode — terminal'), findsOneWidget);
+    expect(done, isFalse);
+
+    // Run the whole intro. Still no exit while init is outstanding.
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(done, isFalse);
+
+    // Init completes -> the splash starts its own exit and reports once.
+    await tester.pumpWidget(MaterialApp(
+      home: BrandSplash(
+        ready: true,
+        animate: true,
+        onDone: () => done = true,
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(done, isTrue);
+  });
+
+  testWidgets('reduced motion has no timeline and shows the lockup',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: BrandSplash(ready: true, animate: false),
+    ));
+    await tester.pump();
+    expect(find.byType(AppIconTile), findsOneWidget);
+    expect(find.text('ZCode'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('splash provides its own Material', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: BrandSplash(animate: false)),
+      const MaterialApp(
+        home: BrandSplash(ready: true, animate: false),
+      ),
     );
     await tester.pumpAndSettle();
 

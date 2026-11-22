@@ -41,7 +41,15 @@ Widget _pageFor(String? page) {
     case 'login':
       return const LoginPage();
     case 'splash':
-      return const BrandSplash();
+      // `?page=splash&t=0.35` pins the intro at 35% for deterministic frames.
+      // Without `t`, show the static end state so the preview never loops.
+      return BrandSplash(
+        ready: true,
+        animate: false,
+        debugProgress: double.tryParse(
+          Uri.base.queryParameters['t'] ?? '',
+        ),
+      );
     default:
       return HomeShell(
         initialTab: int.tryParse(Uri.base.queryParameters['tab'] ?? '') ?? 0,

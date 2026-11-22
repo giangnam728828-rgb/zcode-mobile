@@ -840,3 +840,62 @@ void _drainQueue() {
 - 390×844 且带状态栏/手势条内边距时，整页**不需要滚动**即可看到页脚（`widget_test.dart` 用 `maxScrollExtent <= 1` 守住）。
 - 320dp + 1.3 倍字体无 `RenderFlex overflow`；顶部 `/ mobile` 在窄屏自动让位，版本号保留。
 - 测试 128 → 131。
+
+## 十五、登录页细节与终端启动序列（v3.10.1）
+
+### 15.1 登录页五处细节
+
+| 位置 | 3.10.0 的问题 | 3.10.1 的修法 |
+|---|---|---|
+| 顶部品牌区 | 图标、`ZCode`、`/ mobile` 各自用不同间距排开 | 合成一个锁形：28dp 图标 + 8dp 间距 + 15dp 字标 + 发丝分隔线 + `/mobile`；窄屏只让 `/mobile` 让位，版本 chip 保留 |
+| 主视觉横幅 | 正方形图标塞进 2:1 横幅，必然裁成眼睛特写；标题直接压在人物上 | 从原图另裁一张 `assets/brand/cover_banner.png`（草帽 + 脸 + 向日葵 + 蝴蝶结都在），标题收进左下角的半透明终端面板，避开眼睛主体 |
+| 两个登录入口 | 主按钮主色填充 + 推荐标，次按钮几乎无填充，看起来像不可用 | 收敛填充与描边差值：主按钮填充从 16%/7% 降到 12%/5%，次按钮加浅底、主色描边 badge 和圆形描边箭头；推荐层级保留，两个入口都明显可点 |
+| 三栏账号说明 | 390dp 下三列偏紧，320dp 单字换行 | 横向 padding 10→12、字号 11→11.5、标签与值间距 4→5；<360dp 仍转逐行布局，但每行上下padding加到9 |
+| 底部免责声明 | 与卡片距离近 | sheet 与免责之间从 10dp 提到 18dp；为守住 390×844 一屏，封面高度同时回退 8dp（整页不滚动的回归测试仍在） |
+
+深色和浅色仍各用一套封面渐隐与面板材质：浅色是天空蓝到纸白 + 半透明白色标题面板，深色是近黑场 + 半透明黑标题面板。
+
+### 15.2 启动动画为什么被判不通过
+
+3.10.0 的真机表现是：原生 splash 先画一次「浅色底 + 居中 Logo」，Flutter 再画一次图标和字标，`AnimatedSwitcher` 又在切换页面时把 splash 与新页面叠在一起淡入淡出。结果就是两套 Logo 先后出现、又被简单淡掉，完全没有终端产品的特征。
+
+根因有三处：
+
+1. `drawable/launch_background.xml` 里有一条居中 `launch_image` bitmap；
+2. Android 12+ 系统 SplashScreen 还会从 `android:icon` 再画一次图标；
+3. `BrandSplash` 只有 520ms 的图标缩放淡入，且退出靠外层 cross-fade。
+
+### 15.3 新的启动序列
+
+`lib/pages/splash_page.dart` 重写为一条 OLED 友好的终端序列（总时长 880ms，与初始化并行）：
+
+| 时刻 | 画面 |
+|---|---|
+| 0–15% | 图标从 0.22 透明度淡入并轻微放大——第一帧就有品牌痕迹，不会被误读成黑屏 |
+| 10–28% | `ZCode` 字标通过 ClipRect 宽度揭示自然展开，不是淡入 |
+| 24–42% | 真终端窗口出现：标题栏三灯、`zcode — terminal`、1px 描边、固定 122dp 高 |
+| 38–66% | 三行启动内容依次浮现：`$ zcode --boot` / `ZCode Mobile · workspace ready` / `> ready` |
+| 66–80% | 方块光标用 ConstantTween 做两次真实开关闪烁，不是呼吸光 |
+| 84–100% | 终端收起，只剩品牌锁形；随后 splash 自己用 160ms 淡出 |
+
+实现要点：
+
+- **双 controller**：`_intro`（720ms 序列）+ `_exit`（160ms 淡出）。退出由 splash 自己驱动，结束后回调 `onDone`；根组件此时才换页，**Logo 与登录页不再同屏**。
+- **不阻塞初始化**：`AppState.init()` 与序列并行；`ready` 未完成时序列停在整个终端收起后的品牌锁形上等待，不会提前落到未就绪的页面，也没有人为加长的等待计时器。
+- **只播一次**：`_root` 的 `_introDone` 一旦置真不再回退；从后台恢复时 splash 分支已不在树里，不会再播。
+- **减少动态效果**：OS 的 `disableAnimations` 为真时，不建时间轴、不停顿，`_intro.value=1` 直接显示静态锁形，`ready` 一到就切页。
+- **深浅色不跳变**：终端窗口固定深色（真实终端的样子），背景跟随 `p.bg`，淡出时背景色与登录页背景是同一组令牌。
+
+### 15.4 原生层去重
+
+- `drawable/launch_background.xml` 去掉居中 bitmap，只保留纯色场；
+- 新增 `values-v31/styles.xml` 与 `values-night-v31/styles.xml`，把 `windowSplashScreenAnimatedIcon` 指向 1dp 全透明 shape——Android 12+ 的系统图标不再抢在 Flutter 序列前画一次；
+- `splash_background` / `splash_bar` 从 `#F5F6F8` / `#0C0E12` 改成 `#E9ECF1` / `#101419`，与 `AppPalette.light.bg` / `dark.bg` 完全一致。
+
+注意这是**用透明 shape 抑制系统图标**，不是重画应用图标；launcher / 登录页 / 启动序列仍共用 `assets/brand/app_icon.png`。
+
+### 15.5 验证与真机录屏的边界
+
+- 测试 **131 → 133**：新增「未 ready 时序列不退出、完成后只回调一次」和「减少动效无时间轴」两条。
+- `preview-3.10.1/splash-sequence.png` 与 `splash-light-sequence.png` 是把 `debugProgress` 钉在固定进度的逐帧截图，`splash-preview-web.mp4` 是这些帧合成的顺序样片——**全部来自 Flutter 网页渲染，不是 Android 真机录屏**。
+- 本环境没有 adb / 模拟器 / scrcpy，无法产出真机录屏。真机验收脚本见 `tools/record-splash.sh`：覆盖冷启动未登录、冷启动已登录、后台恢复三个场景，输出 mp4 供人工核对白屏 / 黑屏 / 重复 Logo / 闪烁。

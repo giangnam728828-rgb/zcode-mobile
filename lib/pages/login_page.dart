@@ -10,7 +10,7 @@ import '../widgets/brand_mark.dart';
 
 /// Bumped alongside `pubspec.yaml`. Shown in the header so a bug report can
 /// name the build without opening settings.
-const String _kVersion = '3.10.0';
+const String _kVersion = '3.10.1';
 
 /// First-run screen: sign in with the platform account, exactly like the
 /// desktop client. No API key is typed or stored by hand.
@@ -89,8 +89,8 @@ class _LoginPageState extends State<LoginPage> {
             builder: (BuildContext context, BoxConstraints c) {
               final bool compact = c.maxHeight < 720;
               final double coverHeight = compact
-                  ? 176
-                  : (c.maxHeight * 0.205).clamp(176.0, 218.0);
+                  ? 168
+                  : (c.maxHeight * 0.205).clamp(168.0, 208.0);
               return SingleChildScrollView(
                 padding: EdgeInsets.only(
                   bottom: MediaQuery.paddingOf(context).bottom + 20,
@@ -122,7 +122,7 @@ class _LoginPageState extends State<LoginPage> {
                                     horizontal: AppTokens.gutter),
                                 child: _sheet(context, p, cs, en),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 18),
                               _Footer(en: en),
                             ],
                           ),
@@ -161,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+      padding: const EdgeInsets.fromLTRB(18, 13, 18, 11),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -376,28 +376,30 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
       child: Row(
         children: <Widget>[
-          const AppIconTile(size: 26),
-          const SizedBox(width: 9),
+          const AppIconTile(size: 28),
+          const SizedBox(width: 8),
           Flexible(
             child: Text(
               'ZCode',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 14.5,
+                fontSize: 15,
                 fontWeight: FontWeight.w700,
-                letterSpacing: -0.2,
+                letterSpacing: -0.3,
                 color: p.text,
               ),
             ),
           ),
           if (showSuffix) ...<Widget>[
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
+            Container(width: 1, height: 13, color: p.lineStrong),
+            const SizedBox(width: 8),
             Text(
-              '/ mobile',
+              '/mobile',
               maxLines: 1,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10.5,
                 fontFamily: 'monospace',
                 color: p.textTertiary,
               ),
@@ -456,11 +458,11 @@ class _Cover extends StatelessWidget {
           fit: StackFit.expand,
           children: <Widget>[
             Image.asset(
-              'assets/brand/app_icon.png',
+              // A dedicated wide crop of the same source art: the square icon
+              // cropped into a 2:1 plate lost the hat and the sunflower.
+              'assets/brand/cover_banner.png',
               fit: BoxFit.cover,
-              // Bias up and slightly right so the hat and the sunflower stay
-              // in frame when the plate is 390x244.
-              alignment: const Alignment(0.18, -0.32),
+              alignment: const Alignment(0.5, 0),
               filterQuality: FilterQuality.high,
             ),
             if (p.isDark)
@@ -560,14 +562,35 @@ class _Cover extends StatelessWidget {
                     ],
                   ),
                   const Spacer(),
-                  Text(
-                    en ? 'The terminal,\nin your pocket.' : '把终端\n装进口袋。',
-                    style: TextStyle(
-                      fontSize: headSize,
-                      height: 1.16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.6,
-                      color: ink,
+                  // The headline sits in its own translucent panel. It is a
+                  // terminal overlay, not text painted on the character: the
+                  // face stays unobstructed above it and the caption keeps a
+                  // guaranteed contrast in both themes.
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(11, 7, 12, 8),
+                    decoration: BoxDecoration(
+                      color: p.isDark
+                          ? const Color(0x8C0A0E13)
+                          : const Color(0xDEF7FAFD),
+                      borderRadius: BorderRadius.circular(AppTokens.rSm),
+                      border: Border.all(
+                        color: p.isDark
+                            ? const Color(0x1FFFFFFF)
+                            : const Color(0x1A000000),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Text(
+                      en
+                          ? 'The terminal,\nin your pocket.'
+                          : '把终端\n装进口袋。',
+                      style: TextStyle(
+                        fontSize: headSize - 4,
+                        height: 1.16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.6,
+                        color: ink,
+                      ),
                     ),
                   ),
                 ],
@@ -725,11 +748,11 @@ class _ProviderCard extends StatelessWidget {
     final AppPalette p = AppPalette.of(context);
     final ColorScheme cs = Theme.of(context).colorScheme;
     final Color fill = primary
-        ? cs.primary.withValues(alpha: p.isDark ? 0.16 : 0.07)
-        : (p.isDark ? const Color(0xFF171E27) : const Color(0xFFF8FAFC));
+        ? cs.primary.withValues(alpha: p.isDark ? 0.12 : 0.05)
+        : (p.isDark ? const Color(0xFF1A222C) : const Color(0xFFF5F7FA));
     final Color edge = primary
-        ? cs.primary.withValues(alpha: p.isDark ? 0.44 : 0.30)
-        : p.line;
+        ? cs.primary.withValues(alpha: p.isDark ? 0.38 : 0.26)
+        : p.lineStrong;
 
     return Opacity(
       opacity: enabled ? 1 : 0.5,
@@ -743,18 +766,20 @@ class _ProviderCard extends StatelessWidget {
         child: InkWell(
           onTap: enabled ? onTap : null,
           child: Padding(
-            padding: EdgeInsets.fromLTRB(12, primary ? 12 : 9, 12, primary ? 12 : 9),
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
             child: Row(
               children: <Widget>[
                 Container(
-                  width: primary ? 40 : 34,
-                  height: primary ? 40 : 34,
+                  width: primary ? 38 : 34,
+                  height: primary ? 38 : 34,
                   decoration: BoxDecoration(
                     color: primary ? cs.primary : Colors.transparent,
                     borderRadius: BorderRadius.circular(11),
                     border: primary
                         ? null
-                        : Border.all(color: p.lineStrong, width: 1),
+                        : Border.all(
+                            color: cs.primary.withValues(alpha: 0.38),
+                            width: 1),
                   ),
                   child: Center(
                     child: Text(
@@ -763,7 +788,9 @@ class _ProviderCard extends StatelessWidget {
                         fontSize: primary ? 17 : 14.5,
                         fontWeight: FontWeight.w800,
                         height: 1,
-                        color: primary ? cs.onPrimary : p.textSecondary,
+                        color: primary
+                            ? cs.onPrimary
+                            : cs.primary.withValues(alpha: 0.85),
                       ),
                     ),
                   ),
@@ -846,8 +873,21 @@ class _ProviderCard extends StatelessWidget {
                         size: 16, color: cs.onPrimary),
                   )
                 else
-                  Icon(Icons.chevron_right_rounded,
-                      size: 19, color: p.textTertiary),
+                  // An outlined arrow gives the second port the same "you can
+                  // press me" affordance; a bare chevron read as a disabled row.
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: cs.primary.withValues(alpha: 0.34),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 14, color: cs.primary.withValues(alpha: 0.8)),
+                  ),
               ],
             ),
           ),
@@ -1047,7 +1087,7 @@ class _FactStrip extends StatelessWidget {
                   child: Container(height: 0.8, color: edge),
                 ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
@@ -1115,7 +1155,7 @@ class _Fact extends StatelessWidget {
     final AppPalette p = AppPalette.of(context);
     final ColorScheme cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -1129,11 +1169,11 @@ class _Fact extends StatelessWidget {
               color: cs.primary.withValues(alpha: 0.9),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           Text(
             value,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 11.5,
               height: 1.4,
               color: p.textSecondary,
             ),
