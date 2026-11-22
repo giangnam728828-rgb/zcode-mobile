@@ -604,7 +604,9 @@ class _Attachments extends StatelessWidget {
         alignment: alignEnd ? WrapAlignment.end : WrapAlignment.start,
         children: <Widget>[
           for (final Attachment a in attachments)
-            if (a.isImage && resolvePath != null)
+            // An over-limit file is never sent (the wire layer leaves a note
+            // instead), so previewing it would be a lie.
+            if (a.isImage && resolvePath != null && !a.exceedsLimit)
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Image.file(
@@ -624,32 +626,43 @@ class _Attachments extends StatelessWidget {
   }
 
   Widget _fileChip(ColorScheme cs, Attachment a) {
+    // Files pulled in by an `@` mention are not screened by the composer, so
+    // this is the only place the user learns it never left the phone.
+    final bool over = a.exceedsLimit;
+    final Color fg = over ? cs.error : cs.onSurface.withValues(alpha: 0.65);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: cs.onSurface.withValues(alpha: 0.06),
+        color: over
+            ? cs.error.withValues(alpha: 0.07)
+            : cs.onSurface.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: cs.onSurface.withValues(alpha: 0.09)),
+        border: Border.all(
+          color: over
+              ? cs.error.withValues(alpha: 0.35)
+              : cs.onSurface.withValues(alpha: 0.09),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Icon(
-            a.isImage ? Icons.image_outlined : Icons.description_outlined,
+            over
+                ? Icons.error_outline
+                : (a.isImage ? Icons.image_outlined : Icons.description_outlined),
             size: 13,
-            color: cs.onSurface.withValues(alpha: 0.55),
+            color: over ? cs.error : cs.onSurface.withValues(alpha: 0.55),
           ),
           const SizedBox(width: 5),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 170),
             child: Text(
-              a.sizeLabel.isEmpty ? a.name : '${a.name} · ${a.sizeLabel}',
+              over
+                  ? '${a.name} · ${a.sizeLabel} 未发送'
+                  : (a.sizeLabel.isEmpty ? a.name : '${a.name} · ${a.sizeLabel}'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11.5,
-                color: cs.onSurface.withValues(alpha: 0.65),
-              ),
+              style: TextStyle(fontSize: 11.5, color: fg),
             ),
           ),
         ],

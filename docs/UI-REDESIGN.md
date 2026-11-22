@@ -695,3 +695,87 @@ List<String> get queue => <String>[for (final _QueuedTurn q in _queue) q.text];
 - 附件上限：图片 3MB、文本 512KB、大小未知不判超限。
 
 全量 **116/116**，`flutter analyze` 无 error / warning。
+
+---
+
+## 十三、P6 队列并发修复（v3.9.1）
+
+v3.9.0 修的是「立即发送清空队列」，这一版修的是**同一块代码里更隐蔽的一处**：队列在等下一轮启动的那 260ms 里，队头已经被摘出去了。
+
+### 13.1 缺陷
+
+```dart
+// 修复前
+void _drainQueue() {
+  if (_queue.isEmpty) return;
+  final _QueuedTurn next = _queue.removeAt(0);   // ← 先出队
+  Future<void>.delayed(const Duration(milliseconds: 260), () {
+    if (!streaming) _startTurn(next.text, ...);  // ← 再判能不能启动
+  });
+}
+```
+
+出队和判空隔着 260ms。这 260ms 里只要有一次 `send()` 成功启动新 turn（`streaming` 变 true），定时器醒来看到「有人正在跑」就直接返回——而那条消息**已经在外面了，没有任何地方会把它放回去**。
+
+这是「上一轮刚修完队列丢失，同一函数里还剩一条丢法」。触发条件也不苛刻：AI 刚答完、用户看到结论立刻发下一条，正好落在这个窗口里。
+
+### 13.2 修法
+
+把「检查、出队、启动」压进同一个同步块，中间不留空隙：
+
+```dart
+void _drainQueue() {
+  if (_queue.isEmpty) return;
+  if (_queueTimer != null) return;          // 同一时刻只排一班
+  _queueTimer = Timer(const Duration(milliseconds: 260), () {
+    _queueTimer = null;
+    if (streaming || _queue.isEmpty) return; // 队头没动，让赢家回头再排
+    final _QueuedTurn next = _queue.first;   // peek，不取
+    if (_startTurn(next.text, attachments: next.attachments)) {
+      _queue.remove(next);
+      notifyListeners();
+    }
+  });
+}
+```
+
+三个要点：
+
+| 点 | 为什么 |
+|---|---|
+| 队头用 `first` 而不是 `removeAt(0)` | 没启动成功就等于没消费过，天然幂等 |
+| `_startTurn` 返回 `bool` | 「没登录 / 没配置」会拒绝启动，这种失败不能吃掉消息 |
+| 出队后补一次 `notifyListeners` | `_startTurn` 内部那次通知发生在出队之前，队列条会一直挂着已经开始的那条 |
+
+`_queueTimer` 既是去重也是节流：`finally`、`flushQueueNow`、用户连发都可能在同一帧里触发排空，重复调用现在只是 no-op，不会排进第二班。
+
+### 13.3 @ 引用的附件：报告说「绕过检查」，实际是「没有反馈」
+
+核对后结论要更正一半：`_fromMentions` 一直带着 `size: f.lengthSync()`，`_wireFrom` 也有 `exceedsLimit` 分支，所以超限的 `@` 文件**不会被静默丢弃**，请求里会留一条带原因的占位：
+
+```
+[Attachment omitted: shot.png is 5.0 MB, over the 3 MB limit]
+```
+
+真正的问题是**用户看不到**——输入框只校验自己那一排附件 chip，`@` 引用是在 `_startTurn` 里才解析的，拦不到。所以修在气泡：超限文件不再显示缩略图（反正不发），chip 转成错误色 + `未发送` 后缀。这是全链路唯一的可见落点，手动选的和 `@` 引用的走同一条渲染。
+
+### 13.4 停止键的反馈
+
+拆键解决了「打字时按不到停止」，但按下之后没有任何变化——工具正在执行时收尾可能要几秒，按钮看起来像没响应。
+
+新增 `AppState.stopping`（`_cancelRequested && streaming`），停止键在此状态下换成 14dp 的转圈并禁用点按，tooltip / 语义标签同步变成「正在停止…」。同时补了 `Semantics(button: true)` 和 `Tooltip`，读屏用户之前只能听到一个没有标签的图标。
+
+### 13.5 测试
+
+**116 → 128**，新增 12 条：
+
+| 组 | 用例 |
+|---|---|
+| 队列并发 | 队头在启动前不出队；重复排空不叠加；turn 运行中到点不消费；启动被拒时保留消息 |
+| 窄屏 | 320 / 360 / 390dp 下双键并存，长文本不溢出 |
+| 大字 | 320dp + 1.3 倍字体 |
+| 多行 | 四行草稿两个键仍可达 |
+| 停止态 | 请求停止后显示转圈、不再显示停止图标 |
+| 气泡 | 超限 chip 出现「未发送」；正常 chip 不出现 |
+
+窄屏那几条不靠肉眼：`RenderFlex overflow` 会直接让 `testWidgets` 失败。

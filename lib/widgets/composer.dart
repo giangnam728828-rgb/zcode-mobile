@@ -35,6 +35,7 @@ class Composer extends StatefulWidget {
     this.filePaths = const <String>[],
     this.extraCommands = const <SlashCommand>[],
     this.embedded = false,
+    this.stopping = false,
   }) : super(key: key);
 
   final TextEditingController controller;
@@ -62,6 +63,9 @@ class Composer extends StatefulWidget {
   /// Hosted by the root shell: the bar sits on the shared backdrop instead of
   /// painting an opaque strip, and leaves the bottom inset to the shell.
   final bool embedded;
+
+  /// A stop was requested and the turn is still tearing down.
+  final bool stopping;
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -747,25 +751,54 @@ class _ComposerState extends State<Composer> {
   /// Cancel the live turn. Kept apart from send so it stays reachable while
   /// the user is already typing the next message.
   Widget _stopKey(ColorScheme cs, bool dark) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: cs.onSurface.withValues(alpha: 0.18)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: () {
-            HapticFeedback.selectionClick();
-            widget.onStop();
-          },
-          child: Icon(
-            Icons.stop_rounded,
-            size: 18,
-            color: cs.onSurface.withValues(alpha: 0.72),
+    final bool busy = widget.stopping;
+    final String label = busy
+        ? (widget.s.isEnglish ? 'Stopping…' : '正在停止…')
+        : (widget.s.isEnglish ? 'Stop generating' : '停止生成');
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        label: label,
+        button: true,
+        enabled: !busy,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: cs.onSurface.withValues(alpha: 0.18)),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: busy
+                  ? null
+                  : () {
+                      HapticFeedback.selectionClick();
+                      widget.onStop();
+                    },
+              child: Center(
+                child: busy
+                    // A spinner instead of a disabled-looking stop icon: the
+                    // request went through, the tool just has not returned.
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.6,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            cs.onSurface.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        Icons.stop_rounded,
+                        size: 18,
+                        color: cs.onSurface.withValues(alpha: 0.72),
+                      ),
+              ),
+            ),
           ),
         ),
       ),

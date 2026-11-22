@@ -97,6 +97,8 @@ class AppState extends ChangeNotifier {
   Timer? _persist;
   Timer? _drain;
   Timer? _indexRefresh;
+  /// Pending hand-off to the next queued turn. See [_drainQueue].
+  Timer? _queueTimer;
 
   String _pendingText = '';
   String _pendingThink = '';
@@ -547,7 +549,10 @@ class AppState extends ChangeNotifier {
     return out;
   }
 
-  void _startTurn(
+  /// Returns whether a turn actually started. The queue relies on this: a turn
+  /// that refuses to start (no session, no config) must leave the queued item
+  /// in place instead of consuming it.
+  bool _startTurn(
     String content, {
     List<Attachment> attachments = const <Attachment>[],
   }) {
@@ -556,9 +561,9 @@ class AppState extends ChangeNotifier {
     if (session == null) {
       error = '请先登录账号';
       notifyListeners();
-      return;
+      return false;
     }
-    if (cfg == null || c == null) return;
+    if (cfg == null || c == null) return false;
 
     error = null;
     final List<Attachment> files = _fromMentions(content, attachments);
@@ -589,6 +594,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     _run(cfg, List<ChatMessage>.from(c.messages), assistant);
+    return true;
   }
 
   static const String agentsTemplate = '''# 项目说明
@@ -954,11 +960,39 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Exposes the queue hand-off to tests. The invariant under test is that the
+  /// head stays in [_queue] until a turn actually starts.
+  @visibleForTesting
+  void debugDrainQueue() => _drainQueue();
+
+  @visibleForTesting
+  bool get debugHasPendingDrain => _queueTimer != null;
+
+  /// Starts the next queued turn after a short gap, so the transcript does not
+  /// jump the instant the previous one ends.
+  ///
+  /// The head must not leave the queue until the turn has actually started.
+  /// Taking it out first and checking `streaming` afterwards loses it: if the
+  /// user sends something during the 260ms wait, that turn starts first, the
+  /// timer sees `streaming == true`, returns, and the dequeued message is gone.
+  /// Peeking instead means the "check, dequeue, start" step happens in one
+  /// synchronous block, with no window in between.
   void _drainQueue() {
     if (_queue.isEmpty) return;
-    final _QueuedTurn next = _queue.removeAt(0);
-    Future<void>.delayed(const Duration(milliseconds: 260), () {
-      if (!streaming) _startTurn(next.text, attachments: next.attachments);
+    // One timer at a time; repeated calls are no-ops rather than extra waits.
+    if (_queueTimer != null) return;
+    _queueTimer = Timer(const Duration(milliseconds: 260), () {
+      _queueTimer = null;
+      // Something else started meanwhile. Leave the head where it is — the
+      // turn that won the race calls this again when it finishes.
+      if (streaming || _queue.isEmpty) return;
+      final _QueuedTurn next = _queue.first;
+      if (_startTurn(next.text, attachments: next.attachments)) {
+        // `_startTurn` already notified, but that was before the dequeue, so
+        // the queue bar would keep showing a turn that is now running.
+        _queue.remove(next);
+        notifyListeners();
+      }
     });
   }
 
@@ -1009,10 +1043,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// True between the stop tap and the turn tearing down. A tool already in
+  /// flight is not interrupted mid-call, so this can stay on for a few
+  /// seconds — the button has to show that the tap registered.
+  bool get stopping => _cancelRequested && streaming;
+
   void stop({bool flushQueue = true}) {
     if (!streaming) return;
-    _cancelRequested = true;
-    if (_approval != null && !_approval!.isCompleted) {
+    _cancelRequested = true;    if (_approval != null && !_approval!.isCompleted) {
       _approval!.complete(false);
     }
     _runner?.cancel();
@@ -1872,6 +1910,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _persist?.cancel();
     _drain?.cancel();
+    _queueTimer?.cancel();
     _indexRefresh?.cancel();
     automation?.stop();
     PrivilegeBridge.stopListening();

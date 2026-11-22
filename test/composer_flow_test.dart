@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zcode_mobile/l10n/strings.dart';
 import 'package:zcode_mobile/models/app_config.dart';
 import 'package:zcode_mobile/models/attachment.dart';
+import 'package:zcode_mobile/models/chat_message.dart';
 import 'package:zcode_mobile/state/app_state.dart';
+import 'package:zcode_mobile/widgets/message_bubble.dart';
 import 'package:zcode_mobile/widgets/composer.dart';
 
 void main() {
@@ -50,6 +52,44 @@ void main() {
       s.removeQueued(-1);
       expect(s.queue.length, 3);
     });
+
+    test('the head stays queued until a turn really starts', () {
+      final AppState s = queueing();
+      s.debugDrainQueue();
+      // The old code did `removeAt(0)` and only then waited, which is the
+      // window where the message could go missing.
+      expect(s.queue, <String>['改登录页', '优化设置页', '修文件浏览器']);
+      expect(s.debugHasPendingDrain, isTrue);
+    });
+
+    test('drain repeats do not stack extra waits', () {
+      final AppState s = queueing();
+      s.debugDrainQueue();
+      s.debugDrainQueue();
+      s.debugDrainQueue();
+      expect(s.queue.length, 3);
+      expect(s.debugHasPendingDrain, isTrue);
+    });
+
+    test('a running turn keeps the head queued', () async {
+      final AppState s = queueing(); // streaming: true
+      s.debugDrainQueue();
+      await Future<void>.delayed(const Duration(milliseconds: 320));
+      // The wait expired while a turn was live: nothing may be consumed.
+      expect(s.queue, <String>['改登录页', '优化设置页', '修文件浏览器']);
+      expect(s.debugHasPendingDrain, isFalse);
+    });
+
+    test('a turn that cannot start keeps its item', () async {
+      final AppState s = AppState()..config = AppConfig.empty;
+      s.streaming = true;
+      s.send('改登录页');
+      s.streaming = false; // turn ended, now the queue may advance
+      s.debugDrainQueue();
+      await Future<void>.delayed(const Duration(milliseconds: 320));
+      // No session, so `_startTurn` refuses. The message must not be spent.
+      expect(s.queue, <String>['改登录页']);
+    });
   });
 
   group('file mentions', () {
@@ -93,20 +133,29 @@ void main() {
       bool streaming = false,
       List<Attachment> attachments = const <Attachment>[],
       void Function(String)? onSend,
+      double width = 390,
+      double textScale = 1,
+      bool stopping = false,
     }) async {
-      // Phone width: two 44dp keys plus the box have to fit in 390dp without
+      // Phone width: two 44dp keys plus the box have to fit without
       // overflowing, which the default 800x600 test surface would hide.
-      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.physicalSize = Size(width * 3, 844 * 3);
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
       final TextEditingController ctrl = TextEditingController();
       await tester.pumpWidget(MaterialApp(
+        builder: (BuildContext context, Widget? child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: Align(
             alignment: Alignment.bottomCenter,
             child: Composer(
               controller: ctrl,
               streaming: streaming,
+              stopping: stopping,
               queue: const <String>[],
               s: S.zh,
               attachments: attachments,
@@ -142,6 +191,50 @@ void main() {
       // keystroke, so cancelling required clearing the box.
       expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
       expect(find.byIcon(Icons.schedule_send_rounded), findsOneWidget);
+    });
+
+    // Narrow phones and large text are where two fixed 44dp keys start to eat
+    // the input box. A RenderFlex overflow fails the test by itself.
+    for (final double w in <double>[320, 360, 390]) {
+      testWidgets('both keys fit at ${w.toInt()}dp', (tester) async {
+        final TextEditingController ctrl =
+            await pump(tester, streaming: true, width: w);
+        ctrl.text = '排队一条比较长的消息，看看输入框还剩下多少宽度';
+        await tester.pump();
+        expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+        expect(find.byIcon(Icons.schedule_send_rounded), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('both keys fit at 320dp with 1.3x text', (tester) async {
+      final TextEditingController ctrl = await pump(
+        tester,
+        streaming: true,
+        width: 320,
+        textScale: 1.3,
+      );
+      ctrl.text = '大字体下也不该把按钮挤掉';
+      await tester.pump();
+      expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a multi-line draft still leaves both keys reachable',
+        (tester) async {
+      final TextEditingController ctrl = await pump(tester, streaming: true);
+      ctrl.text = '第一行\n第二行\n第三行\n第四行';
+      await tester.pump();
+      expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.schedule_send_rounded), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a requested stop shows progress instead of a dead button',
+        (tester) async {
+      await pump(tester, streaming: true, stopping: true);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byIcon(Icons.stop_rounded), findsNothing);
     });
 
     testWidgets('an oversized attachment blocks the send and says why',
@@ -204,6 +297,57 @@ void main() {
         isImage: true,
       );
       expect(unknown.exceedsLimit, isFalse);
+    });
+
+    testWidgets('a chip for an unsent file says so', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MessageBubble(
+            s: S.zh,
+            message: ChatMessage(
+              id: 'u1',
+              role: Sender.user,
+              text: '看看这张图',
+              attachments: const <Attachment>[
+                Attachment(
+                  path: 'shot.png',
+                  name: 'shot.png',
+                  isImage: true,
+                  size: 5 * 1024 * 1024,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ));
+      // Files pulled in by `@` never pass the composer, so the bubble is the
+      // only place the user can learn it was dropped.
+      expect(find.textContaining('未发送'), findsOneWidget);
+    });
+
+    testWidgets('a normal attachment chip stays quiet', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MessageBubble(
+            s: S.zh,
+            message: ChatMessage(
+              id: 'u2',
+              role: Sender.user,
+              text: '看看这个',
+              attachments: const <Attachment>[
+                Attachment(
+                  path: 'notes.md',
+                  name: 'notes.md',
+                  isImage: false,
+                  size: 2048,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ));
+      expect(find.textContaining('未发送'), findsNothing);
+      expect(find.textContaining('notes.md'), findsOneWidget);
     });
   });
 }

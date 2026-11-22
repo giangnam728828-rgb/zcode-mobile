@@ -219,6 +219,7 @@ class _ChatPageState extends State<ChatPage> {
           controller: _input,
           embedded: widget.embedded,
           streaming: state.streaming,
+          stopping: state.stopping,
           queue: state.queue,
           s: s,
           attachments: _attachments,
