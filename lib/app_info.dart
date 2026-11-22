@@ -1,3 +1,3 @@
 /// Single source of truth for the version shown in Settings → About.
 /// Keep in sync with `version:` in pubspec.yaml.
-const String kAppVersion = '3.11.1';
+const String kAppVersion = '3.11.2';

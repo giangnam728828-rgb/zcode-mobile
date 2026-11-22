@@ -42,34 +42,53 @@ Future<http.Response> json(Map<String, dynamic> body, [int status = 200]) =>
     Future<http.Response>.value(http.Response(jsonEncode(body), status,
         headers: <String, String>{'content-type': 'application/json'}));
 
-/// Standard BigModel chain: token route → customer info → api keys → issue.
+/// Standard BigModel chain, mirroring the official client's schemas:
+/// envelope {code:200,...} everywhere, getCustomerInfo returns
+/// organizations[].projects[], key entries carry their id in `apiKey`.
 FakeClient bigmodelClient({
   Map<String, dynamic> tokenBody = const <String, dynamic>{
+    'code': 200,
     'data': <String, dynamic>{
       'token': 'jwt-1',
       'bigmodel': <String, dynamic>{'access_token': 'acct-1'},
     },
   },
   Map<String, dynamic> infoBody = const <String, dynamic>{
+    'code': 200,
     'data': <String, dynamic>{
-      'organizationId': 'org-1',
-      'projectId': 'proj-1',
       'customerName': '测试用户',
       'planName': 'GLM Coding Plan',
+      'organizations': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'organizationId': 'org-1',
+          'organizationName': '默认机构',
+          'projects': <Map<String, dynamic>>[
+            <String, dynamic>{'projectId': 'proj-1', 'projectName': '默认项目'},
+          ],
+        },
+      ],
     },
   },
   Object? keysBody = const <String, dynamic>{
+    'code': 200,
     'data': <Map<String, dynamic>>[
-      <String, dynamic>{'id': 'key-1', 'name': 'zcode-api-key'},
+      <String, dynamic>{'apiKey': 'key-1', 'name': 'zcode-api-key'},
     ],
   },
   int keysStatus = 200,
   Map<String, dynamic> issueBody = const <String, dynamic>{
-    'data': <String, dynamic>{'token': 'proj-token-1', 'expiresIn': 1800},
+    'code': 200,
+    'data': <String, dynamic>{
+      'token': 'proj-token-1',
+      'enabled': true,
+      'expiresIn': 1800,
+    },
   },
   int issueStatus = 200,
+  List<String>? seenPaths,
 }) {
   return FakeClient((http.BaseRequest request) async {
+    if (seenPaths != null) seenPaths.add(request.url.path);
     final String path = request.url.path;
     if (path.endsWith('/oauth/token')) return json(tokenBody);
     if (path.contains('getCustomerInfo')) return json(infoBody);
@@ -124,8 +143,7 @@ void main() {
     final AccountService svc =
         AccountService(client: bigmodelClient(), vault: vault);
 
-    final AccountSession s =
-        await runLogin(svc, AccountRegion.bigmodel);
+    final AccountSession s = await runLogin(svc, AccountRegion.bigmodel);
     expect(s.projectToken, 'proj-token-1');
     expect(s.credentialSource, CredentialSource.projectToken);
     expect(s.hasModelCredential, isTrue);
@@ -185,11 +203,119 @@ void main() {
     expect(stored['issueError'], contains('403'));
   });
 
-  test('missing org/project in account info fails loudly, no guessing',
+  test('team projects are skipped when picking a personal project',
+      () async {
+    final List<String> seen = <String>[];
+    final AccountService svc = AccountService(
+      client: bigmodelClient(
+        infoBody: <String, dynamic>{
+          'code': 200,
+          'data': <String, dynamic>{
+            'organizations': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'organizationId': 'org-1',
+                'organizationName': '默认机构',
+                'projects': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'projectId': 'proj-team',
+                    'projectName': '团队项目',
+                    'projectType': 2,
+                  },
+                  <String, dynamic>{'projectId': 'proj-personal'},
+                ],
+              },
+            ],
+          },
+        },
+        seenPaths: seen,
+      ),
+      vault: MemoryVault(),
+    );
+    final AccountSession s = await runLogin(svc, AccountRegion.bigmodel);
+    expect(s.orgId, 'org-1');
+    // The key management happened on the personal project, not the team one.
+    expect(
+      seen.where((String p) => p.contains('/api_keys')).first,
+      contains('/projects/proj-personal/'),
+    );
+    expect(s.hasModelCredential, isTrue);
+  });
+
+  test('a business error envelope surfaces its code and message', () async {
+    final AccountService svc = AccountService(
+      client: bigmodelClient(
+        issueBody: <String, dynamic>{
+          'code': 5001,
+          'msg': '没有签发权限',
+        },
+      ),
+      vault: MemoryVault(),
+    );
+    final AccountSession s = await runLogin(svc, AccountRegion.bigmodel);
+    expect(s.hasModelCredential, isFalse);
+    expect(s.issueError, contains('业务码 5001'));
+    expect(s.issueError, contains('没有签发权限'));
+  });
+
+  test('a create response without the apiKey field names what came back',
+      () async {
+    final AccountService svc = AccountService(
+      client: FakeClient((http.BaseRequest request) async {
+        final String path = request.url.path;
+        if (path.endsWith('/oauth/token')) {
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{
+              'token': 'jwt-1',
+              'bigmodel': <String, dynamic>{'access_token': 'acct-1'},
+            },
+          });
+        }
+        if (path.contains('getCustomerInfo')) {
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{
+              'organizations': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'organizationId': 'org-1',
+                  'organizationName': '默认机构',
+                  'projects': <Map<String, dynamic>>[
+                    <String, dynamic>{'projectId': 'proj-1'},
+                  ],
+                },
+              ],
+            },
+          });
+        }
+        if (path.endsWith('/api_keys')) {
+          if (request.method == 'GET') {
+            // No dedicated key yet.
+            return json(<String, dynamic>{'code': 200, 'data': <Object?>[]});
+          }
+          // Create succeeds but the payload lacks the official `apiKey` id.
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{'unexpected': true},
+          });
+        }
+        return http.Response('not found', 404);
+      }),
+      vault: MemoryVault(),
+    );
+    final AccountSession s = await runLogin(svc, AccountRegion.bigmodel);
+    expect(s.hasModelCredential, isFalse);
+    expect(s.issueError, contains('缺少 apiKey 字段'));
+    expect(s.issueError, contains('unexpected'));
+  });
+
+  test('missing organizations in customer info fails loudly, no guessing',
       () async {
     final AccountService svc = AccountService(
       client: bigmodelClient(
-          infoBody: <String, dynamic>{'data': <String, dynamic>{'customerName': 'x'}}),
+          infoBody: <String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{'customerName': 'x'},
+          }),
       vault: MemoryVault(),
     );
     final AccountSession s = await runLogin(svc, AccountRegion.bigmodel);
@@ -210,7 +336,8 @@ void main() {
     final ({String redirect, String state}) params =
         await callbackParamsOf(await urlReady.future);
     // Wrong state: not our transaction — the login must keep waiting.
-    await http.get(Uri.parse('${params.redirect}?state=WRONG&error=access_denied'));
+    await http.get(
+        Uri.parse('${params.redirect}?state=WRONG&error=access_denied'));
     await Future<void>.delayed(const Duration(milliseconds: 120));
     // Now the real callback with the right state completes the flow.
     await http.get(
@@ -282,6 +409,83 @@ void main() {
     expect(next.projectToken, 'proj-token-1');
     expect(next.hasModelCredential, isTrue);
     expect(vault.data['session'], contains('project-token'));
+  });
+
+  test('a business 404 on issuance drops the cached location and retries',
+      () async {
+    final MemoryVault vault = MemoryVault();
+    int issueCalls = 0;
+    final AccountService svc = AccountService(
+      client: FakeClient((http.BaseRequest request) async {
+        final String path = request.url.path;
+        if (path.endsWith('/oauth/token')) {
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{
+              'token': 'jwt-1',
+              'bigmodel': <String, dynamic>{'access_token': 'acct-1'},
+            },
+          });
+        }
+        if (path.contains('getCustomerInfo')) {
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{
+              'organizations': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'organizationId': 'org-fresh',
+                  'organizationName': '默认机构',
+                  'projects': <Map<String, dynamic>>[
+                    <String, dynamic>{'projectId': 'proj-fresh'},
+                  ],
+                },
+              ],
+            },
+          });
+        }
+        if (path.endsWith('/api_keys')) {
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <Map<String, dynamic>>[
+              <String, dynamic>{'apiKey': 'key-fresh', 'name': 'zcode-api-key'},
+            ],
+          });
+        }
+        if (path.endsWith('/access_tokens')) {
+          issueCalls++;
+          if (issueCalls == 1) {
+            // The cached key/project is gone: business 404 in a 200 body.
+            return json(<String, dynamic>{'code': 404, 'msg': 'not found'});
+          }
+          return json(<String, dynamic>{
+            'code': 200,
+            'data': <String, dynamic>{
+              'token': 'proj-token-fresh',
+              'enabled': true,
+            },
+          });
+        }
+        return http.Response('not found', 404);
+      }),
+      vault: vault,
+    );
+
+    final AccountSession stale = AccountSession(
+      region: 'bigmodel',
+      accessToken: 'acct-1',
+      projectToken: 'old',
+      expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+      credentialSource: CredentialSource.projectToken,
+      orgId: 'org-stale',
+      projectId: 'proj-stale',
+      keyId: 'key-stale',
+    );
+    final AccountSession next = await svc.refresh(stale);
+    expect(issueCalls, 2);
+    expect(next.orgId, 'org-fresh');
+    expect(next.projectId, 'proj-fresh');
+    expect(next.keyId, 'key-fresh');
+    expect(next.projectToken, 'proj-token-fresh');
   });
 
   test('refresh surfaces an invalid account as reauth', () async {

@@ -116,16 +116,57 @@ class RemoteWebView extends StatefulWidget {
   State<RemoteWebView> createState() => _RemoteWebViewState();
 }
 
-class _RemoteWebViewState extends State<RemoteWebView> {
+class _RemoteWebViewState extends State<RemoteWebView>
+    with WidgetsBindingObserver {
   late final WebViewController _controller;
   int _progress = 100;
   String? _failure;
 
+  /// When the app went to the background; the official page's websocket dies
+  /// in long backgrounds, so coming back after a while reloads instead of
+  /// showing a frozen half-dead session.
+  DateTime? _pausedAt;
+  static const Duration _reloadAfterBackground = Duration(seconds: 45);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     RemoteHub.instance.touch(widget.connection);
     _controller = _make();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+      return;
+    }
+    if (state == AppLifecycleState.resumed && mounted) {
+      final DateTime? pausedAt = _pausedAt;
+      _pausedAt = null;
+      final bool longBackground = pausedAt != null &&
+          DateTime.now().difference(pausedAt) > _reloadAfterBackground;
+      // Short gaps: the official page reconnects its own websocket. Long ones
+      // or a shown error: reload the whole page.
+      if (_failure != null || longBackground) {
+        _reload();
+      }
+    }
+  }
+
+  void _reload() {
+    setState(() {
+      _failure = null;
+      _progress = 0;
+    });
+    _controller.loadRequest(Uri.parse(widget.connection.url));
   }
 
   WebViewController _make() {
@@ -182,13 +223,7 @@ class _RemoteWebViewState extends State<RemoteWebView> {
                 visualDensity: VisualDensity.compact,
                 tooltip: '刷新',
                 icon: const Icon(Icons.refresh_rounded, size: 19),
-                onPressed: () {
-                  setState(() {
-                    _failure = null;
-                    _progress = 0;
-                  });
-                  _controller.loadRequest(Uri.parse(widget.connection.url));
-                },
+                onPressed: _reload,
               ),
               IconButton(
                 visualDensity: VisualDensity.compact,
@@ -235,8 +270,7 @@ class _RemoteWebViewState extends State<RemoteWebView> {
                           TextButton(
                             onPressed: () {
                               setState(() => _failure = null);
-                              _controller
-                                  .loadRequest(Uri.parse(widget.connection.url));
+                              _reload();
                             },
                             child: const Text('重试'),
                           ),

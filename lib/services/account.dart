@@ -80,15 +80,24 @@ enum CredentialSource {
 }
 
 /// Sign-in / issuance failure. [step] says which leg of the chain failed,
-/// [statusCode] carries the HTTP status when there was one, and [reauth] marks
-/// failures that can only be fixed by signing in again.
+/// [statusCode] carries the HTTP status when there was one, [reauth] marks
+/// failures that can only be fixed by signing in again, and [locationInvalid]
+/// means the cached org/project/key id is gone (business code 404) — the
+/// caller should drop the cached location and re-resolve.
 class AccountError implements Exception {
-  AccountError(this.message, {this.step, this.statusCode, this.reauth = false});
+  AccountError(
+    this.message, {
+    this.step,
+    this.statusCode,
+    this.reauth = false,
+    this.locationInvalid = false,
+  });
 
   /// 'authorize' | 'exchange' | 'customer-info' | 'api-keys' | 'issue'
   final String? step;
   final int? statusCode;
   final bool reauth;
+  final bool locationInvalid;
   final String message;
 
   @override
@@ -397,11 +406,33 @@ class AccountService {
       if (current.hasModelCredential) return current;
       throw AccountError('Z.ai 授权已过期，请重新登录', step: 'issue', reauth: true);
     }
-    // BigModel: always run the full chain — a stored session may be missing
-    // org/key ids (previous failure) or carry a legacy credential.
-    final AccountSession next = await _issueProjectToken(current);
-    await persist(next);
-    return next;
+    try {
+      final AccountSession next = await _issueProjectToken(current);
+      await persist(next);
+      return next;
+    } on AccountError catch (e) {
+      if (e.locationInvalid &&
+          (current.orgId != null ||
+              current.projectId != null ||
+              current.keyId != null)) {
+        // The cached location is stale (business 404 on issuance). Mirror the
+        // official client: drop it and re-resolve once from customer info.
+        final AccountSession cleared = AccountSession(
+          region: current.region,
+          accessToken: current.accessToken,
+          zcodeJwt: current.zcodeJwt,
+          projectToken: current.projectToken,
+          expiresAt: current.expiresAt,
+          credentialSource: current.credentialSource,
+          displayName: current.displayName,
+          planLabel: current.planLabel,
+        );
+        final AccountSession next = await _issueProjectToken(cleared);
+        await persist(next);
+        return next;
+      }
+      rethrow;
+    }
   }
 
   // ---------------------------------------------------------------- helpers
@@ -469,6 +500,17 @@ class AccountService {
     return body;
   }
 
+  /// Issues the short-lived project token, mirroring the official client
+  /// (zai-org/ZCode, packages/shared/src/project-access-token-client.ts):
+  ///
+  ///   getCustomerInfo → organizations[].projects[] (personal = projectType
+  ///   ≠ 2; 「默认机构」/「默认项目」 preferred) → list api_keys by name
+  ///   `zcode-api-key` (entries carry their id in the **apiKey** field) →
+  ///   create if missing (usageScene 1) → POST .../{apiKey}/access_tokens
+  ///   with Bearer → {token, enabled}.
+  ///
+  /// BigModel answers HTTP 200 with a business code in the body; only
+  /// 200/0/"200"/"0" count as success (official envelope schema).
   Future<AccountSession> _issueProjectToken(
     AccountSession session, {
     void Function(String)? onProgress,
@@ -478,75 +520,110 @@ class AccountService {
 
     // 1. Which organisation / project does this account belong to?
     if (out.orgId == null || out.projectId == null) {
-      final Map<String, dynamic> info = await _getJson(
+      final Map<String, dynamic> body = await _getEnvelope(
         '$base/api/biz/customer/getCustomerInfo',
+        step: 'customer-info',
         headers: <String, String>{'Authorization': out.accessToken},
       );
-      final String? org = _deepString(info, <String>[
-        'organizationId',
-        'organization_id',
-        'orgId',
-        'org_id',
-      ]);
-      final String? project = _deepString(info, <String>[
-        'projectId',
-        'project_id',
-        'defaultProjectId',
-      ]);
-      final String? name = _deepString(info, <String>[
-        'customerName',
-        'nickName',
-        'name',
-      ]);
-      final String? plan = _deepString(info, <String>[
-        'planName',
-        'packageName',
-        'productName',
-      ]);
+      final Object? data = body['data'];
+      final List<Object?> orgs = data is Map
+          ? (data['organizations'] as List? ?? const <Object?>[])
+          : const <Object?>[];
+      Map? orgPick;
+      List<Map>? orgProjects;
+      for (final Object? o in orgs) {
+        if (o is! Map) continue;
+        final List<Map> projects = <Map>[];
+        final Object? rawProjects = o['projects'];
+        if (rawProjects is List) {
+          for (final Object? p in rawProjects) {
+            if (p is! Map) continue;
+            // Team projects (projectType 2) are excluded from personal
+            // selection — key management on them needs team headers.
+            if ('${p['projectType'] ?? ''}'.trim() == '2') continue;
+            if ('${p['projectId'] ?? ''}'.trim().isEmpty) continue;
+            projects.add(p);
+          }
+        }
+        if (projects.isEmpty) continue;
+        final bool namedOrg = '${o['organizationName'] ?? ''}'.contains('默认机构');
+        if (orgPick == null || namedOrg) {
+          orgPick = o;
+          orgProjects = projects;
+        }
+        if (namedOrg) break;
+      }
+      Map? projectPick;
+      if (orgProjects != null) {
+        for (final Map p in orgProjects) {
+          final bool namedProject =
+              '${p['projectName'] ?? ''}'.contains('默认项目');
+          if (namedProject) {
+            projectPick = p;
+            break;
+          }
+          projectPick ??= p;
+        }
+      }
+      final String orgId = orgPick == null ? '' : '${orgPick['organizationId'] ?? ''}'.trim();
+      final String projectId =
+          projectPick == null ? '' : '${projectPick['projectId'] ?? ''}'.trim();
+      if (orgId.isEmpty || projectId.isEmpty) {
+        throw AccountError('无法确定账号所属组织或项目（个人项目为空）',
+            step: 'customer-info');
+      }
+      final String? name =
+          _deepString(body, <String>['customerName', 'nickName', 'name']);
+      final String? plan = _deepString(
+          body, <String>['planName', 'packageName', 'productName']);
       out = out.copyWith(
-        orgId: org,
-        projectId: project,
+        orgId: orgId,
+        projectId: projectId,
         displayName: name,
         planLabel: plan,
       );
-      if (org == null || project == null) {
-        // Guessing ids to push through is explicitly forbidden: fail loudly.
-        throw AccountError(
-          '无法确定账号所属组织或项目，无法签发模型凭证',
-          step: 'customer-info',
-        );
-      }
     }
 
     onProgress?.call('正在签发项目 Token…');
     final String keysPath =
         '$base/api/biz/v1/organization/${out.orgId}/projects/${out.projectId}/api_keys';
 
-    // 2. Reuse the dedicated key, creating it once if missing.
+    // 2. Reuse the dedicated key, creating it once if missing. Key entries
+    // carry their id in `apiKey` — the field this chain kept missing.
     String? keyId = out.keyId;
     if (keyId == null) {
-      final Map<String, dynamic> list = await _getJson(keysPath,
-          headers: <String, String>{'Authorization': out.accessToken});
-      keyId = _findKeyId(list, _apiKeyName);
+      final Map<String, dynamic> listBody = await _getEnvelope(
+        keysPath,
+        step: 'api-keys',
+        headers: <String, String>{'Authorization': out.accessToken},
+      );
+      keyId = _findKeyId(listBody, _apiKeyName);
       if (keyId == null) {
-        final Map<String, dynamic> created = await _postJson(
+        final Map<String, dynamic> created = await _postEnvelope(
           keysPath,
+          step: 'api-keys',
           headers: <String, String>{
             'Authorization': out.accessToken,
             'content-type': 'application/json',
           },
           body: <String, dynamic>{'name': _apiKeyName, 'usageScene': 1},
         );
-        keyId = _deepString(created, <String>['id', 'apiKeyId', 'keyId']);
+        keyId = _createdKeyId(created);
+        if (keyId == null) {
+          final Object? d = created['data'];
+          final String shape = d is Map
+              ? 'data 字段: ${d.keys.join(', ')}'
+              : (d is List ? 'data 列表(${d.length} 项)' : 'data: ${d.runtimeType}');
+          throw AccountError('创建成功但响应缺少 apiKey 字段（$shape）',
+              step: 'api-keys');
+        }
       }
-    }
-    if (keyId == null) {
-      throw AccountError('无法创建或定位专用 API Key（$_apiKeyName）', step: 'api-keys');
     }
 
     // 3. Trade the key id for a short-lived project token.
-    final Map<String, dynamic> issued = await _postJson(
+    final Map<String, dynamic> issued = await _postEnvelope(
       '$keysPath/$keyId/access_tokens',
+      step: 'issue',
       headers: <String, String>{
         'Authorization': 'Bearer ${out.accessToken}',
         'content-type': 'application/json',
@@ -555,18 +632,23 @@ class AccountService {
         'clientType': 'zcode',
         'clientVersion': _clientVersion,
       },
+      locationInvalidatable: true,
     );
-    final String? token =
-        _deepString(issued, <String>['token', 'accessToken', 'access_token']);
+    final Object? payload = issued['data'];
+    if (payload is! Map) {
+      throw AccountError('签发响应缺少 data', step: 'issue');
+    }
+    if (payload['enabled'] == false) {
+      throw AccountError('模型凭证已被服务端停用', step: 'issue');
+    }
+    final String? token = _deepString(
+        payload, <String>['token', 'accessToken', 'access_token']);
     if (token == null || token.isEmpty) {
-      throw AccountError(
-        '签发接口没有返回有效 Token',
-        step: 'issue',
-        statusCode: null,
-      );
+      throw AccountError('签发响应缺少 token 字段（data 字段: ${payload.keys.join(', ')}）',
+          step: 'issue');
     }
 
-    final int ttl = _deepInt(issued, <String>['expiresIn', 'expires_in']) ?? 1800;
+    final int ttl = _deepInt(payload, <String>['expiresIn', 'expires_in']) ?? 1800;
     return out.copyWith(
       projectToken: token,
       expiresAt: DateTime.now().add(Duration(seconds: ttl)),
@@ -576,8 +658,19 @@ class AccountService {
     );
   }
 
-  Future<Map<String, dynamic>> _getJson(
+  /// BigModel wraps failures in HTTP 200 bodies: {code, msg, data}. Only the
+  /// official success codes (200/0 as int or string) pass; anything else —
+  /// including a missing code — fails with the server's message surfaced.
+  static const List<Object> _successEnvelopeCodes = <Object>[
+    200,
+    0,
+    '200',
+    '0',
+  ];
+
+  Future<Map<String, dynamic>> _getEnvelope(
     String url, {
+    required String step,
     required Map<String, String> headers,
   }) async {
     final http.Response resp = await _http
@@ -586,18 +679,20 @@ class AccountService {
     if (resp.statusCode >= 400) {
       throw AccountError(
         '接口返回 ${resp.statusCode}',
-        step: url.contains('getCustomerInfo') ? 'customer-info' : 'api-keys',
+        step: step,
         statusCode: resp.statusCode,
         reauth: resp.statusCode == 401 || resp.statusCode == 403,
       );
     }
-    return _decode(resp.body);
+    return _validatedEnvelope(resp.body, step);
   }
 
-  Future<Map<String, dynamic>> _postJson(
+  Future<Map<String, dynamic>> _postEnvelope(
     String url, {
+    required String step,
     required Map<String, String> headers,
     required Map<String, dynamic> body,
+    bool locationInvalidatable = false,
   }) async {
     final http.Response resp = await _http
         .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
@@ -605,12 +700,44 @@ class AccountService {
     if (resp.statusCode >= 400) {
       throw AccountError(
         '接口返回 ${resp.statusCode}',
-        step: url.endsWith('/access_tokens') ? 'issue' : 'api-keys',
+        step: step,
         statusCode: resp.statusCode,
         reauth: resp.statusCode == 401 || resp.statusCode == 403,
       );
     }
-    return _decode(resp.body);
+    final Map<String, dynamic> json = _decode(resp.body);
+    final Object? code = json['code'];
+    if (code == null || !_successEnvelopeCodes.contains(code)) {
+      final String? msg = _deepString(
+          json, <String>['msg', 'message', 'error_description', 'error']);
+      final String detail = (msg == null || msg.isEmpty)
+          ? '响应业务码异常（code: $code）'
+          : '业务码 $code：$msg';
+      // Official behaviour: a business 404 on issuance means the cached
+      // org/project/key location is gone — invalidate and re-resolve.
+      if (locationInvalidatable && '$code' == '404') {
+        throw AccountError('Key 或项目不存在（业务码 404）',
+            step: step, locationInvalid: true);
+      }
+      throw AccountError(detail, step: step);
+    }
+    return json;
+  }
+
+  static Map<String, dynamic> _validatedEnvelope(String body, String step) {
+    final Map<String, dynamic> json = _decode(body);
+    final Object? code = json['code'];
+    if (code == null || !_successEnvelopeCodes.contains(code)) {
+      final String? msg = _deepString(
+          json, <String>['msg', 'message', 'error_description', 'error']);
+      throw AccountError(
+        msg == null || msg.isEmpty
+            ? '响应业务码异常（code: $code）'
+            : '业务码 $code：$msg',
+        step: step,
+      );
+    }
+    return json;
   }
 
   Future<void> _stopServer() async {
@@ -704,24 +831,36 @@ class AccountService {
     return null;
   }
 
+  /// Key list entries carry their id in `apiKey` (official keySchema). Older
+  /// field names stay as tolerated fallbacks for schema drift.
   static String? _findKeyId(Map<String, dynamic> body, String name) {
-    List<Object?> candidates = <Object?>[];
     final Object? data = body['data'];
-    if (data is List) candidates = data;
-    if (data is Map) {
-      for (final Object? v in data.values) {
-        if (v is List) candidates = v;
-      }
-    }
+    final List<Object?> candidates =
+        data is List ? data : const <Object?>[];
     for (final Object? item in candidates) {
       if (item is! Map) continue;
       final String itemName = '${item['name'] ?? item['keyName'] ?? ''}';
       if (itemName == name) {
-        final Object? id = item['id'] ?? item['apiKeyId'] ?? item['keyId'];
-        if (id != null) return '$id';
+        final Object? id = item['apiKey'] ??
+            item['id'] ??
+            item['apiKeyId'] ??
+            item['keyId'];
+        if (id != null && '$id'.trim().isNotEmpty) return '$id'.trim();
       }
     }
     return null;
+  }
+
+  /// The create-key response's data payload is the new key entry itself.
+  static String? _createdKeyId(Map<String, dynamic> body) {
+    final Object? data = body['data'];
+    if (data is! Map) return null;
+    final Object? id = data['apiKey'] ??
+        data['id'] ??
+        data['apiKeyId'] ??
+        data['keyId'];
+    if (id == null || '$id'.trim().isEmpty) return null;
+    return '$id'.trim();
   }
 
   static String _randomState() {
