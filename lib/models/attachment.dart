@@ -75,4 +75,17 @@ class Attachment {
     if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
     return '${(size / 1024 / 1024).toStringAsFixed(1)} MB';
   }
+
+  /// Wire-format ceilings, mirrored from `AppState._attachmentBlock`: images
+  /// travel as base64 inside the request, text files are inlined as fenced
+  /// blocks. Anything past these is dropped at send time, so the UI has to say
+  /// so *before* the message goes out — silently sending a message without the
+  /// image the user attached is the one outcome worth blocking.
+  static const int maxImageBytes = 3 * 1024 * 1024;
+  static const int maxTextBytes = 512 * 1024;
+
+  int get limitBytes => isImage ? maxImageBytes : maxTextBytes;
+
+  /// Size is 0 when the length could not be read; unknown is not "too big".
+  bool get exceedsLimit => size > 0 && size > limitBytes;
 }

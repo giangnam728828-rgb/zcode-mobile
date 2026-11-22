@@ -182,7 +182,15 @@ void main() {
   if (empty) c.messages.clear();
   state.conversations.add(c);
   state.currentId = c.id;
-  if (!empty) state.queue.add('再补一个 LICENSE 段落');
+  // `queue` is a getter that returns a fresh list, so `state.queue.add(...)`
+  // would only touch a temporary. Queue through `send` instead: with streaming
+  // on, that is the branch that appends.
+  if (Uri.base.queryParameters['streaming'] == '1') {
+    state.streaming = true;
+    state.send('再补一个 LICENSE 段落');
+    state.send('顺手更新一下 changelog');
+    state.send('然后跑一遍 analyze');
+  }
   state.ready = true;
 
   runApp(

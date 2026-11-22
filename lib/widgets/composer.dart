@@ -67,6 +67,14 @@ class Composer extends StatefulWidget {
   State<Composer> createState() => _ComposerState();
 }
 
+/// A file mention that survives a path with spaces: `@"My Project/a.dart"`.
+///
+/// The bare `@path` form stops at the first space because the parser used to
+/// treat whitespace as the terminator. Quoting keeps the path in one piece;
+/// the parser accepts both forms so text typed by hand still works.
+String mentionFor(String path) =>
+    path.contains(' ') ? '@"$path" ' : '@$path ';
+
 class _Suggestion {
   const _Suggestion({
     required this.icon,
@@ -88,6 +96,9 @@ class _ComposerState extends State<Composer> {
   bool _hasText = false;
   List<_Suggestion> _suggestions = const <_Suggestion>[];
 
+  /// The attachment that stopped a send because it is past the wire limit.
+  Attachment? _blocked;
+
   @override
   void initState() {
     super.initState();
@@ -99,6 +110,9 @@ class _ComposerState extends State<Composer> {
   @override
   void didUpdateWidget(covariant Composer old) {
     super.didUpdateWidget(old);
+    if (!listEquals(old.attachments, widget.attachments)) {
+      _blocked = null;
+    }
     if (old.filePaths != widget.filePaths &&
         widget.controller.text.contains('@')) {
       _rebuildSuggestions();
@@ -165,17 +179,24 @@ class _ComposerState extends State<Composer> {
                   : Icons.description_outlined,
               label: p,
               hint: widget.s.isEnglish ? 'Attach file' : '附上文件内容',
-              insert: '@$p ',
+              insert: mentionFor(p),
             ),
         ];
       }
     }
 
-    if (next.length != _suggestions.length ||
-        (next.isNotEmpty && next.first.label != _suggestions.first.label)) {
+    // Compare the whole list, not just its length and first row. Narrowing
+    // `/file` to `/form` can leave both lists the same size with the same head,
+    // and the panel would keep showing candidates that no longer match.
+    final String sig = _signature(next);
+    if (sig != _signature(_suggestions)) {
       setState(() => _suggestions = next);
     }
   }
+
+  static String _signature(List<_Suggestion> list) => list
+      .map((_Suggestion s) => '${s.label}\u0000${s.insert}\u0000${s.hint}')
+      .join('\n');
 
   IconData _commandIcon(String name) {
     switch (name) {
@@ -209,8 +230,21 @@ class _ComposerState extends State<Composer> {
   void _submit() {
     final String text = widget.controller.text.trim();
     if (text.isEmpty) return;
+    // Block rather than send-without-it: the request drops oversized files, so
+    // letting this through would produce a message that looks sent but never
+    // carried the attachment.
+    for (final Attachment a in widget.attachments) {
+      if (a.exceedsLimit) {
+        HapticFeedback.heavyImpact();
+        setState(() => _blocked = a);
+        return;
+      }
+    }
     widget.controller.clear();
-    setState(() => _suggestions = const <_Suggestion>[]);
+    setState(() {
+      _suggestions = const <_Suggestion>[];
+      _blocked = null;
+    });
     HapticFeedback.lightImpact();
     widget.onSend(text);
     if (!widget.streaming) _focus.requestFocus();
@@ -271,6 +305,7 @@ class _ComposerState extends State<Composer> {
             if (widget.queue.isNotEmpty) _queueBar(cs, dark),
             if (widget.quote != null) _quoteBar(cs, dark),
             if (widget.attachments.isNotEmpty) _attachmentBar(cs, dark),
+            if (_blocked != null) _blockedBar(cs),
             if (_suggestions.isNotEmpty) _suggestionPanel(cs, dark),
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 8, 10, 10),
@@ -351,7 +386,18 @@ class _ComposerState extends State<Composer> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  _sendKey(cs, dark),
+                  // Stop and send are separate controls on purpose. They used
+                  // to share one key, so the moment you started typing the
+                  // next message the stop button turned into a send button and
+                  // the only way to cancel was to clear the box first.
+                  if (widget.streaming && !_hasText)
+                    _stopKey(cs, dark)
+                  else if (widget.streaming) ...<Widget>[
+                    _stopKey(cs, dark),
+                    const SizedBox(width: 6),
+                    _sendKey(cs, dark),
+                  ] else
+                    _sendKey(cs, dark),
                 ],
               ),
             ),
@@ -570,20 +616,31 @@ class _ComposerState extends State<Composer> {
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (BuildContext ctx, int i) {
           final Attachment a = widget.attachments[i];
+          final bool over = a.exceedsLimit;
           return Container(
             padding: const EdgeInsets.fromLTRB(8, 2, 2, 2),
             decoration: BoxDecoration(
-              color: cs.onSurface.withValues(alpha: 0.05),
+              color: over
+                  ? cs.error.withValues(alpha: 0.08)
+                  : cs.onSurface.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
+              border: Border.all(
+                color: over
+                    ? cs.error.withValues(alpha: 0.45)
+                    : cs.onSurface.withValues(alpha: 0.08),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Icon(
-                  a.isImage ? Icons.image_outlined : Icons.description_outlined,
+                  over
+                      ? Icons.error_outline_rounded
+                      : (a.isImage
+                          ? Icons.image_outlined
+                          : Icons.description_outlined),
                   size: 13,
-                  color: cs.primary.withValues(alpha: 0.85),
+                  color: over ? cs.error : cs.primary.withValues(alpha: 0.85),
                 ),
                 const SizedBox(width: 5),
                 ConstrainedBox(
@@ -594,10 +651,19 @@ class _ComposerState extends State<Composer> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11.5,
-                      color: cs.onSurface.withValues(alpha: 0.72),
+                      color: over
+                          ? cs.error
+                          : cs.onSurface.withValues(alpha: 0.72),
                     ),
                   ),
                 ),
+                if (over) ...<Widget>[
+                  const SizedBox(width: 4),
+                  Text(
+                    a.sizeLabel,
+                    style: TextStyle(fontSize: 10, color: cs.error),
+                  ),
+                ],
                 InkWell(
                   onTap: () => widget.onRemoveAttachment?.call(a),
                   borderRadius: BorderRadius.circular(14),
@@ -611,6 +677,36 @@ class _ComposerState extends State<Composer> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Shown when a send was stopped by an oversized attachment, so the reason
+  /// is attached to the thing that caused it rather than a transient snackbar.
+  Widget _blockedBar(ColorScheme cs) {
+    final Attachment a = _blocked!;
+    final String limit = a.isImage ? '3 MB' : '512 KB';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.error_outline_rounded, size: 14, color: cs.error),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              widget.s.isEnglish
+                  ? '${a.name} is ${a.sizeLabel} — over the $limit limit. '
+                      'Remove it to send.'
+                  : '${a.name} 有 ${a.sizeLabel}，超过 $limit 上限，移除后再发。',
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.4,
+                color: cs.error,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -648,31 +744,59 @@ class _ComposerState extends State<Composer> {
     );
   }
 
+  /// Cancel the live turn. Kept apart from send so it stays reachable while
+  /// the user is already typing the next message.
+  Widget _stopKey(ColorScheme cs, bool dark) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.18)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            widget.onStop();
+          },
+          child: Icon(
+            Icons.stop_rounded,
+            size: 18,
+            color: cs.onSurface.withValues(alpha: 0.72),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _sendKey(ColorScheme cs, bool dark) {
-    final bool showStop = widget.streaming && !_hasText;
-    final bool enabled = showStop || _hasText;
+    final bool enabled = _hasText;
+    // While a turn runs, sending means "queue", not "go now" — the queue icon
+    // says that without needing a tooltip.
+    final IconData icon = widget.streaming
+        ? Icons.schedule_send_rounded
+        : Icons.arrow_upward_rounded;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: enabled
-            ? (showStop
-                ? (dark ? const Color(0xFF2A3140) : const Color(0xFFEDF0F5))
-                : cs.primary)
-            : cs.onSurface.withValues(alpha: 0.07),
+        color: enabled ? cs.primary : cs.onSurface.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(22),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           customBorder: const CircleBorder(),
-          onTap: showStop ? widget.onStop : (_hasText ? _submit : null),
+          onTap: enabled ? _submit : null,
           child: Icon(
-            showStop ? Icons.stop_rounded : Icons.arrow_upward_rounded,
-            size: showStop ? 20 : 21,
+            icon,
+            size: 21,
             color: enabled
-                ? (showStop ? cs.onSurface.withValues(alpha: 0.75) : cs.onPrimary)
+                ? cs.onPrimary
                 : cs.onSurface.withValues(alpha: 0.3),
           ),
         ),

@@ -501,12 +501,16 @@ class AppState extends ChangeNotifier {
 
   void flushQueueNow() {
     if (_queue.isEmpty) return;
-    final _QueuedTurn next = _queue.first;
-    // Cancel the live turn and drop the rest, then put this one back at the
-    // head so the turn's own cleanup starts it — starting it here would race
-    // with the cancelled run's `finally`.
+    // "Send now" means "start the first queued turn immediately", not "throw
+    // away the rest". `stop(flushQueue: false)` empties the queue as a side
+    // effect, so snapshot it first and put it straight back.
+    final List<_QueuedTurn> kept = List<_QueuedTurn>.of(_queue);
+    // Starting the turn here would race with the cancelled run's `finally`,
+    // which picks up the head itself once the turn is torn down.
     stop(flushQueue: false);
-    _queue.insert(0, next);
+    _queue
+      ..clear()
+      ..addAll(kept);
     notifyListeners();
   }
 
@@ -524,9 +528,7 @@ class AppState extends ChangeNotifier {
     final Set<String> seen = out.map((Attachment a) => a.path).toSet();
     final ToolBox? box = _toolbox;
     if (box == null) return out;
-    for (final RegExpMatch m in RegExp(r'@([^\s@]+)').allMatches(text)) {
-      final String raw = m.group(1) ?? '';
-      if (raw.isEmpty || raw.startsWith('/')) continue;
+    for (final String raw in parseMentions(text)) {
       final String abs = box.resolvePath(raw);
       final File f = File(abs);
       if (!f.existsSync() || seen.contains(raw)) continue;
@@ -722,8 +724,25 @@ class AppState extends ChangeNotifier {
           parts.add(<String, dynamic>{'type': 'text', 'text': m.text});
         }
         for (final Attachment a in m.attachments) {
+          // Say so instead of vanishing. A message that silently arrives
+          // without the screenshot the user attached is indistinguishable from
+          // the model ignoring it; a note lets the model mention the omission.
+          if (a.exceedsLimit) {
+            parts.add(<String, dynamic>{
+              'type': 'text',
+              'text': '[Attachment omitted: ${a.name} is ${a.sizeLabel}, over '
+                  'the ${a.isImage ? '3 MB' : '512 KB'} limit]',
+            });
+            continue;
+          }
           final String? block = await _attachmentBlock(a);
-          if (block == null) continue;
+          if (block == null) {
+            parts.add(<String, dynamic>{
+              'type': 'text',
+              'text': '[Attachment missing: ${a.name}]',
+            });
+            continue;
+          }
           if (a.isImage) {
             parts.add(<String, dynamic>{
               'type': 'image',
@@ -788,11 +807,11 @@ class AppState extends ChangeNotifier {
     try {
       if (a.isImage) {
         final int size = await f.length();
-        if (size > 3 * 1024 * 1024) return null;
+        if (size > Attachment.maxImageBytes) return null;
         return base64Encode(await f.readAsBytes());
       }
       final int size = await f.length();
-      if (size > 512 * 1024) {
+      if (size > Attachment.maxTextBytes) {
         return 'File: ${a.path} (${(size / 1024).toStringAsFixed(0)} KB, too '
             'large to inline — use read_file with offset/limit)';
       }
@@ -1867,4 +1886,21 @@ class _QueuedTurn {
 
   final String text;
   final List<Attachment> attachments;
+}
+
+/// Extracts file mentions from a message: `@"My Project/a.dart"` and the bare
+/// `@src/main.dart`.
+///
+/// Whitespace ends an unquoted path, which is why the composer quotes paths
+/// that contain spaces. A leading `/` is skipped — it is a slash command, not
+/// a file. Top-level so it can be tested without a workspace.
+List<String> parseMentions(String text) {
+  final RegExp re = RegExp(r'@"([^"]+)"|@([^\s@]+)');
+  final List<String> out = <String>[];
+  for (final RegExpMatch m in re.allMatches(text)) {
+    final String raw = (m.group(1) ?? m.group(2) ?? '').trim();
+    if (raw.isEmpty || raw.startsWith('/')) continue;
+    out.add(raw);
+  }
+  return out;
 }
