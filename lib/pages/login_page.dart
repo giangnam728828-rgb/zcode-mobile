@@ -10,7 +10,7 @@ import '../widgets/brand_mark.dart';
 
 /// Bumped alongside `pubspec.yaml`. Shown in the header so a bug report can
 /// name the build without opening settings.
-const String _kVersion = '3.10.1';
+  const String _kVersion = '3.11.0';
 
 /// First-run screen: sign in with the platform account, exactly like the
 /// desktop client. No API key is typed or stored by hand.
