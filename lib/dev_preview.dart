@@ -11,6 +11,7 @@ import 'models/conversation.dart';
 import 'pages/home_shell.dart';
 import 'pages/automation_page.dart';
 import 'pages/login_page.dart';
+import 'pages/splash_page.dart';
 import 'pages/modules_page.dart';
 import 'pages/plugins_page.dart';
 import 'pages/settings_page.dart';
@@ -39,6 +40,8 @@ Widget _pageFor(String? page) {
       return const WorkspacePickerPage();
     case 'login':
       return const LoginPage();
+    case 'splash':
+      return const BrandSplash();
     default:
       return HomeShell(
         initialTab: int.tryParse(Uri.base.queryParameters['tab'] ?? '') ?? 0,
@@ -52,6 +55,12 @@ void main() {
   final AppState state = AppState();
   state.config = AppConfig.empty.copyWith(model: 'glm-4.6');
   state.config = state.config!.copyWith(glassQuality: 'full');
+  // `?lang=en` renders the English copy so the sign-in hierarchy (which port
+  // gets the accent) can be checked without changing the device language.
+  final String lang = Uri.base.queryParameters['lang'] ?? '';
+  if (lang.isNotEmpty) {
+    state.config = state.config!.copyWith(language: lang);
+  }
   // The web preview has no real workspace, but the market tab is pure catalog.
   state.pluginCenter = PluginCenter(null);
   state.automation = AutomationEngine(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -5,8 +7,10 @@ import 'package:provider/provider.dart';
 import 'models/app_config.dart';
 import 'pages/home_shell.dart';
 import 'pages/login_page.dart';
+import 'pages/splash_page.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
+import 'theme/tokens.dart';
 
 void main() {
   runApp(const ZCodeApp());
@@ -48,21 +52,56 @@ class ZCodeApp extends StatelessWidget {
   }
 }
 
-class _Root extends StatelessWidget {
+class _Root extends StatefulWidget {
   const _Root({Key? key}) : super(key: key);
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  /// Floor for the splash, not a delay before it: `AppState.init()` runs in
+  /// parallel, so the app leaves at whichever finishes last.
+  static const Duration _floor = Duration(milliseconds: 520);
+
+  bool _floorElapsed = false;
+  bool _reducedMotion = false;
+  Timer? _floorTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _reducedMotion = WidgetsBinding
+        .instance.platformDispatcher.accessibilityFeatures.disableAnimations;
+    if (_reducedMotion) {
+      _floorElapsed = true;
+    } else {
+      _floorTimer = Timer(_floor, () {
+        if (mounted) setState(() => _floorElapsed = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _floorTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final AppState state = context.watch<AppState>();
-    if (!state.ready) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    final bool signedIn = state.session != null;
-    if (!signedIn) {
-      return const LoginPage();
-    }
-    return const HomeShell();
+    final bool splash = !state.ready || !_floorElapsed;
+    return AnimatedSwitcher(
+      duration: _reducedMotion ? Duration.zero : AppTokens.base,
+      child: splash
+          ? BrandSplash(
+              key: const ValueKey<String>('splash'),
+              animate: !_reducedMotion,
+            )
+          : state.session != null
+              ? const HomeShell(key: ValueKey<String>('home'))
+              : const LoginPage(key: ValueKey<String>('login')),
+    );
   }
 }
