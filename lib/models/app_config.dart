@@ -52,9 +52,17 @@ class AppConfig {
   final double fontScale; // 0.9 / 1.0 / 1.1 / 1.2
   final String language; // 'zh' | 'en'
 
-  /// 'soft' | 'full' | 'flat'. Controls how much backdrop filtering the glass
-  /// surfaces are allowed to use; see GlassQuality.
+  /// 'auto' | 'soft' | 'full' | 'flat'. 'auto' lets the frame probe in
+  /// [GlassProbe] choose; the others are a user lock. See GlassQuality.
   final String glassQuality;
+
+  /// Where `auto` currently sits. Persisted so the next launch starts at the
+  /// tier this device actually managed, instead of flickering back up to soft
+  /// for two seconds on every cold start.
+  final String glassAutoTier;
+
+  /// Whether the one-time "we lowered the glass" notice has been shown.
+  final bool glassAutoHinted;
 
   /// Tool approval policy: 'risky' asks only for destructive shell/file writes,
   /// 'ask' asks for every tool, 'auto' lets the agent run unattended.
@@ -80,7 +88,9 @@ class AppConfig {
     this.accentId = 'indigo',
     this.fontScale = 1.0,
     this.language = 'zh',
-    this.glassQuality = 'soft',
+    this.glassQuality = 'auto',
+    this.glassAutoTier = 'soft',
+    this.glassAutoHinted = false,
     this.approvalMode = 'risky',
     this.temperature = 0.7,
     this.autoCompact = true,
@@ -128,6 +138,8 @@ class AppConfig {
     double? fontScale,
     String? language,
     String? glassQuality,
+    String? glassAutoTier,
+    bool? glassAutoHinted,
     String? approvalMode,
     double? temperature,
     bool? autoCompact,
@@ -145,6 +157,8 @@ class AppConfig {
       fontScale: fontScale ?? this.fontScale,
       language: language ?? this.language,
       glassQuality: glassQuality ?? this.glassQuality,
+      glassAutoTier: glassAutoTier ?? this.glassAutoTier,
+      glassAutoHinted: glassAutoHinted ?? this.glassAutoHinted,
       approvalMode: approvalMode ?? this.approvalMode,
       temperature: temperature ?? this.temperature,
       autoCompact: autoCompact ?? this.autoCompact,
@@ -164,6 +178,8 @@ class AppConfig {
         'fontScale': fontScale,
         'language': language,
         'glassQuality': glassQuality,
+        'glassAutoTier': glassAutoTier,
+        'glassAutoHinted': glassAutoHinted,
         'approvalMode': approvalMode,
         'temperature': temperature,
         'autoCompact': autoCompact,
@@ -177,6 +193,11 @@ class AppConfig {
     double temp = 0.7;
     final Object? rawTemp = json['temperature'];
     if (rawTemp is num) temp = rawTemp.toDouble();
+    // `glassAutoHinted` only exists from 3.8.0 on. A config without it predates
+    // automatic tiering, so its `glassQuality` is the old hard-coded default
+    // rather than a considered choice — hand it to the probe instead of
+    // freezing every existing install on whatever it happened to store.
+    final bool legacyGlass = !json.containsKey('glassAutoHinted');
     return AppConfig(
       provider: (json['provider'] as String?) ?? 'bigmodel',
       baseUrl: (json['baseUrl'] as String?) ?? Endpoints.bigmodel,
@@ -188,7 +209,11 @@ class AppConfig {
       accentId: (json['accentId'] as String?) ?? 'indigo',
       fontScale: fs.clamp(0.85, 1.3),
       language: (json['language'] as String?) ?? 'zh',
-      glassQuality: (json['glassQuality'] as String?) ?? 'soft',
+      glassQuality: legacyGlass
+          ? 'auto'
+          : ((json['glassQuality'] as String?) ?? 'auto'),
+      glassAutoTier: (json['glassAutoTier'] as String?) ?? 'soft',
+      glassAutoHinted: (json['glassAutoHinted'] as bool?) ?? false,
       approvalMode: (json['approvalMode'] as String?) ?? 'risky',
       temperature: temp.clamp(0.0, 1.0),
       autoCompact: (json['autoCompact'] as bool?) ?? true,

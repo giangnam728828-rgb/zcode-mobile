@@ -21,6 +21,40 @@ import 'plugins_page.dart';
 import 'terminal_page.dart';
 import 'workspace_picker_page.dart';
 
+/// One line under the glass picker that explains the current choice.
+///
+/// `auto` reports where the probe has actually settled, so the setting is not a
+/// black box — the user can see "Auto, currently Soft" rather than guessing
+/// whether anything is happening.
+String _glassNote(bool en, AppConfig c) {
+  if (GlassQuality.isAuto(c.glassQuality)) {
+    final GlassQuality tier =
+        GlassQuality.parse(c.glassAutoTier);
+    if (en) {
+      return 'Steps down when measured frames slip, and never climbs back.\n'
+          'Now: ${tier.labelEn}.';
+    }
+    return '按实测帧率自动降档，不会自己升回去。\n'
+        '当前：${tier.label}。';
+  }
+  switch (GlassQuality.parse(c.glassQuality)) {
+    case GlassQuality.flat:
+      return en
+          ? 'No blur — translucent fill and a hairline only. Cheapest, and the '
+              'right pick on a hot phone.'
+          : '不模糊，只留半透明底和一条发丝边。最省，机身发热时选它。';
+    case GlassQuality.soft:
+      return en
+          ? 'One blur pass on the header and dock. The everyday setting.'
+          : '顶栏和 Dock 各一次模糊，日常用它。';
+    case GlassQuality.full:
+      return en
+          ? 'Adds a 1.06x refraction pass on the header and dock. Prettiest, '
+              'and the most expensive.'
+          : '顶栏和 Dock 多一层 1.06 倍折射，最像真玻璃，也最贵。';
+  }
+}
+
 /// Settings is a stack of labelled groups, not one long form.
 ///
 /// Order is by frequency of change, not by importance: automation and the
@@ -605,21 +639,23 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     _FieldTile(
                       label: en ? 'Glass' : '玻璃质感',
-                      note: en
-                          ? 'Liquid adds one 1.06x refraction pass on the header '
-                              'and dock. Drop to Soft or Off if scrolling stutters.'
-                          : '「强折射」只在顶栏和 Dock 上加一次 1.06 倍折射；'
-                              '如果滑动掉帧，降到「标准」或「关闭」。',
+                      note: _glassNote(en, c),
                       child: _Seg(
                         options: <String>[
+                          en ? 'Auto' : '自动',
                           en ? 'Off' : '关闭',
                           en ? 'Soft' : '标准',
                           en ? 'Liquid' : '强折射',
                         ],
-                        values: const <String>['flat', 'soft', 'full'],
+                        values: const <String>['auto', 'flat', 'soft', 'full'],
                         selected: c.glassQuality,
-                        onPick: (String v) =>
-                            state.updatePrefs(glassQuality: v),
+                        onPick: (String v) => state.updatePrefs(
+                          glassQuality: v,
+                          // Re-picking Auto must re-run the measurement, so
+                          // send it back to the top of the ladder.
+                          glassAutoTier: v == 'auto' ? 'soft' : null,
+                          glassAutoHinted: v == 'auto' ? false : null,
+                        ),
                       ),
                     ),
                   ],

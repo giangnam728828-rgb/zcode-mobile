@@ -195,6 +195,35 @@ enum GlassQuality {
     }
   }
 
+  /// `auto` is a *preference*, not a rendering tier: it means "let the frame
+  /// probe pick". Parsing it yields the render fallback so no call site has to
+  /// special-case it; [resolve] is what the shell uses.
+  static bool isAuto(String? id) => id == 'auto';
+
+  /// Turns a stored preference into the tier to actually render.
+  ///
+  /// [autoTier] is the last tier the probe settled on, so a cold start does not
+  /// have to stutter through the measurement again before it drops.
+  static GlassQuality resolve(
+    String? pref, {
+    GlassQuality autoTier = GlassQuality.soft,
+  }) {
+    if (isAuto(pref)) return autoTier;
+    return parse(pref);
+  }
+
+  /// One step down the ladder: full -> soft -> flat -> null (nowhere to go).
+  GlassQuality? get below {
+    switch (this) {
+      case GlassQuality.full:
+        return GlassQuality.soft;
+      case GlassQuality.soft:
+        return GlassQuality.flat;
+      case GlassQuality.flat:
+        return null;
+    }
+  }
+
   String get id => name;
 
   String get label {
@@ -207,4 +236,17 @@ enum GlassQuality {
         return '强折射';
     }
   }
+
+  String get labelEn {
+    switch (this) {
+      case GlassQuality.flat:
+        return 'Off';
+      case GlassQuality.soft:
+        return 'Soft';
+      case GlassQuality.full:
+        return 'Liquid';
+    }
+  }
+
+  String labelFor(bool english) => english ? labelEn : label;
 }

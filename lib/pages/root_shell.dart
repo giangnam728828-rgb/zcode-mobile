@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../models/app_config.dart';
 import '../state/app_state.dart';
 import '../state/dock_visibility.dart';
+import '../state/glass_probe.dart';
 import '../theme/glass.dart';
 import '../theme/tokens.dart';
 import '../widgets/app_dock.dart';
@@ -44,10 +46,96 @@ class _RootShellState extends State<RootShell>
 
   late int _index = widget.initialIndex.clamp(0, 3);
 
+  /// Only alive while the user has glass on `auto`; see [_syncProbe].
+  GlassProbe? _probe;
+
+  /// One notice per launch, even if it drops twice.
+  bool _notifiedTier = false;
+
   @override
   void dispose() {
+    _probe?.dispose();
     _fade.dispose();
     super.dispose();
+  }
+
+  /// Keeps the frame probe in step with the stored preference.
+  ///
+  /// Called from [build] and idempotent: a locked tier disposes it, `auto`
+  /// creates it once, and it is never recreated while it is still measuring
+  /// (each downgrade rewrites the config, which rebuilds this page).
+  void _syncProbe(AppConfig? c) {
+    final bool auto = c != null && GlassQuality.isAuto(c.glassQuality);
+    if (!auto) {
+      if (_probe != null) {
+        _probe!.dispose();
+        _probe = null;
+        _notifiedTier = false;
+      }
+      return;
+    }
+    if (_probe != null) {
+      // Re-picking "Auto" in Settings resets the stored tier so the user can
+      // re-measure after fixing whatever made it stutter. Honour that only
+      // once the current probe has finished — a running one is mid-ladder and
+      // its own writes must not restart it.
+      final GlassQuality stored = GlassQuality.parse(c.glassAutoTier);
+      if (!_probe!.settled || stored.index <= _probe!.quality.index) return;
+      _probe!.dispose();
+      _probe = null;
+      _notifiedTier = false;
+    }
+    final GlassQuality start = GlassQuality.parse(c.glassAutoTier);
+    // Already at the floor — there is no cheaper tier to prove.
+    if (start == GlassQuality.flat) return;
+    _probe = GlassProbe(start: start)..addListener(_onTierChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _probe?.start());
+  }
+
+  void _onTierChanged() {
+    final GlassProbe? probe = _probe;
+    if (!mounted || probe == null) return;
+    final AppState state = context.read<AppState>();
+    // A locked tier may have replaced `auto` while the window was filling.
+    if (!GlassQuality.isAuto(state.config?.glassQuality)) {
+      probe.cancel();
+      return;
+    }
+    // Remember where it landed: the next launch starts there instead of
+    // re-measuring from soft and stuttering for two seconds.
+    state.updatePrefs(glassAutoTier: probe.quality.id);
+    setState(() {});
+    if (_notifiedTier) return;
+    if (state.config?.glassAutoHinted ?? true) return;
+    _notifiedTier = true;
+    state.updatePrefs(glassAutoHinted: true);
+    _showTierNotice(probe.quality);
+  }
+
+  void _showTierNotice(GlassQuality q) {
+    final bool en = widget.s.isEnglish;
+    final String name = q.labelFor(en);
+    final double dockFloor = AppDock.height +
+        26 +
+        MediaQuery.of(context).padding.bottom;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        margin: EdgeInsets.fromLTRB(16, 0, 16, dockFloor + 8),
+        content: Text(
+          en
+              ? 'Glass lowered to “$name” to keep scrolling smooth. '
+                  'Lock a level in Settings › Appearance.'
+              : '滑动有点吃力，已把玻璃效果降到「$name」。'
+                  '可在 设置 › 外观 里锁定档位。',
+        ),
+        action: SnackBarAction(
+          label: en ? 'Settings' : '设置',
+          onPressed: () => _select(3),
+        ),
+      ),
+    );
   }
 
   void _select(int i) {
@@ -101,8 +189,15 @@ class _RootShellState extends State<RootShell>
       ),
     ];
 
+    final AppConfig? cfg = state.config;
+    _syncProbe(cfg);
+    final GlassQuality quality = GlassQuality.resolve(
+      cfg?.glassQuality,
+      autoTier: _probe?.quality ?? GlassQuality.parse(cfg?.glassAutoTier),
+    );
+
     return GlassScope(
-      quality: GlassQuality.parse(state.config?.glassQuality),
+      quality: quality,
       reduceMotion: mq.disableAnimations,
       child: Scaffold(
         key: _scaffold,
