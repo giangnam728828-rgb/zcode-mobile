@@ -19,6 +19,10 @@ dependencies:
   markdown: ^7.3.1
   provider: ^6.1.5
   liquid_glass_widgets: ^1.19.0
+  # Desktop remote control (总方案 阶段B): the official remote page runs in an
+  # embedded webview; QR pairing uses the camera scanner.
+  webview_flutter: ^4.10.0
+  mobile_scanner: ">=5.2.3 <8.0.0"
 
 dev_dependencies:
   flutter_test:
