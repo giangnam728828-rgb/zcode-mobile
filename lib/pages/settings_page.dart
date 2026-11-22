@@ -8,6 +8,7 @@ import '../app_info.dart';
 import '../l10n/strings.dart';
 import '../models/app_config.dart';
 import '../platform/device_bridge.dart';
+import '../remote/remote_page.dart';
 import '../services/account.dart';
 import '../services/workspace.dart';
 import '../state/app_state.dart';
@@ -81,6 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _maxTokens;
   bool _dirty = false;
   bool _keyVisible = false;
+  bool _reissueBusy = false;
 
   @override
   void initState() {
@@ -119,10 +121,16 @@ class _SettingsPageState extends State<SettingsPage> {
   String _sessionLine(AppState state) {
     final AccountSession? session = state.session;
     if (session == null) return '未登录';
-    final DateTime t = session.expiresAt.toLocal();
     String two(int v) => v.toString().padLeft(2, '0');
     final String plan = session.planLabel ?? session.accountRegion.label;
-    return '$plan · 凭据 ${two(t.hour)}:${two(t.minute)} 过期';
+    if (!session.hasModelCredential) {
+      // Explicit degradation: the account signed in but no model credential
+      // was issued. Say so instead of showing a fabricated expiry.
+      return '$plan · 模型凭证不可用，点击「重新签发」';
+    }
+    final DateTime? t = session.expiresAt?.toLocal();
+    if (t == null) return '$plan · 模型凭证可用';
+    return '$plan · 凭证 ${two(t.hour)}:${two(t.minute)} 过期';
   }
 
   Future<void> _openAgents(AppState state, S s) async {
@@ -142,6 +150,24 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     state.refreshFileIndex();
     setState(() {});
+  }
+
+  Future<void> _reissue(AppState state) async {
+    if (_reissueBusy) return;
+    setState(() => _reissueBusy = true);
+    final String problem = await state.reissueCredential();
+    if (!mounted) return;
+    setState(() => _reissueBusy = false);
+    final bool en = S
+        .of(state.config?.language)
+        .isEnglish;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 4),
+      content: Text(problem.isEmpty
+          ? (en ? 'Model credential re-issued.' : '模型凭证已重新签发')
+          : '${en ? 'Re-issue failed' : '签发失败'}：$problem'),
+    ));
   }
 
   Future<void> _confirmSignOut(AppState state) async {
@@ -564,6 +590,20 @@ class _SettingsPageState extends State<SettingsPage> {
                         if (mounted) setState(() {});
                       },
                     ),
+                    _Tile(
+                      icon: Icons.computer_outlined,
+                      label: en ? 'Desktop remote' : '桌面远程控制',
+                      sub: en
+                          ? 'Drive the ZCode desktop app; tasks run on the PC'
+                          : '连接电脑上的 ZCode，任务在桌面端执行、消耗桌面套餐',
+                      onTap: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                              builder: (_) => const RemotePage()),
+                        );
+                        if (mounted) setState(() {});
+                      },
+                    ),
                   ],
                 ),
                 _Group(
@@ -763,6 +803,19 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
+              if (session != null && !session.hasModelCredential)
+                TextButton(
+                  onPressed: () => _reissue(state),
+                  style: TextButton.styleFrom(
+                    foregroundColor: cs.primary,
+                    minimumSize: const Size(48, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  child: Text(
+                    en ? 'Re-issue' : '重新签发',
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
+                ),
               if (session != null)
                 TextButton(
                   onPressed: () => _confirmSignOut(state),

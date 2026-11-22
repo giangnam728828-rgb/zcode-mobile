@@ -261,7 +261,11 @@ class AppState extends ChangeNotifier {
 
   bool get configured => session != null;
 
-  bool get needsReauth => session != null && session!.expired;
+  /// True when signed in but no usable model credential is held, i.e. the
+  /// account is fine while model calls are not. The settings card and chat
+  /// errors surface this instead of pretending the session is complete.
+  bool get modelCredentialUnavailable =>
+      session != null && !session!.hasModelCredential;
 
   ToolBox? get tools => _toolbox;
 
@@ -341,18 +345,56 @@ class AppState extends ChangeNotifier {
   }
 
   /// Project tokens are short lived; swap in a fresh one before a turn when it
-  /// is near expiry so a long session does not die mid-answer.
-  Future<void> _refreshIfNeeded() async {
+  /// is near expiry so a long session does not die mid-answer. Also the healing
+  /// path for a session that signed in while issuance failed. Returns whether a
+  /// refresh actually happened, so the turn's errors can say so.
+  Future<bool> _refreshIfNeeded() async {
     final AccountSession? s = session;
-    if (s == null) return;
-    if (DateTime.now()
-        .isBefore(s.expiresAt.subtract(const Duration(minutes: 2)))) {
-      return;
+    if (s == null) return false;
+    if (s.region == 'zai') return false; // nothing to re-issue server-side
+    if (s.hasModelCredential &&
+        s.expiresAt != null &&
+        DateTime.now().isBefore(s.expiresAt!.subtract(const Duration(minutes: 2)))) {
+      return false;
     }
     try {
       session = await _account.refresh(s);
+      notifyListeners();
+      return true;
+    } on AccountError catch (e) {
+      // Keep whatever credential the session still holds; the turn surfaces
+      // the real cause (message includes the failing step) instead of a
+      // generic 401. A reauth failure is sticky so settings can show it.
+      if (e.reauth || !s.hasModelCredential) {
+        session = s.copyWith(issueError: e.message);
+        notifyListeners();
+      }
+      return false;
     } catch (_) {
-      // Keep the old token; the turn surfaces a 401 if it really expired.
+      // Non-account failures (network): keep the old token; the turn surfaces
+      // a network error if it really cannot reach the issuer.
+      return false;
+    }
+  }
+
+  /// Settings entry: try issuing a fresh model credential. Returns '' on
+  /// success, otherwise a sanitized failure message for the UI.
+  Future<String> reissueCredential() async {
+    final AccountSession? s = session;
+    if (s == null) return '未登录账号';
+    try {
+      session = await _account.refresh(s);
+      notifyListeners();
+      return '';
+    } on AccountError catch (e) {
+      if (e.reauth) {
+        session = s.copyWith(issueError: e.message);
+      }
+      notifyListeners();
+      return e.message;
+    } catch (e) {
+      notifyListeners();
+      return '$e';
     }
   }
 
@@ -838,20 +880,24 @@ class AppState extends ChangeNotifier {
     ChatMessage target,
   ) async {
     final ToolBox? box = _toolbox;
+    bool refreshed = false;
     try {
       if (box == null) throw StateError('工具环境尚未就绪');
-      await _refreshIfNeeded();
+      refreshed = await _refreshIfNeeded();
       final AccountSession s = session!;
 
       box.beginTurn();
       final AgentRunner runner = AgentRunner(
         baseUrl: cfg.baseUrl,
-        token: s.projectToken,
+        token: s.modelCredential,
         model: cfg.model,
         toolbox: box,
         maxTokens: cfg.maxTokens,
         maxSteps: cfg.maxSteps,
         temperature: cfg.temperature,
+        provider: cfg.provider,
+        environment: 'local',
+        tokenRefreshed: refreshed,
       );
       _runner = runner;
 
@@ -1336,7 +1382,7 @@ class AppState extends ChangeNotifier {
     try {
       final AgentRunner runner = AgentRunner(
         baseUrl: cfg.baseUrl,
-        token: s.projectToken,
+        token: s.modelCredential,
         model: cfg.model,
         toolbox: box,
         maxTokens: cfg.maxTokens,
@@ -1814,7 +1860,7 @@ class AppState extends ChangeNotifier {
     try {
       final AgentRunner runner = AgentRunner(
         baseUrl: cfg.baseUrl,
-        token: session!.projectToken,
+        token: session!.modelCredential,
         model: cfg.model,
         toolbox: box,
         maxTokens: cfg.maxTokens,

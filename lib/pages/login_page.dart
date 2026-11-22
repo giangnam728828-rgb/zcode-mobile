@@ -51,7 +51,7 @@ class _LoginPageState extends State<LoginPage> {
     });
     final AppState state = context.read<AppState>();
     try {
-      await state.signIn(
+      final AccountSession? s = await state.signIn(
         region,
         onStatus: (String s) {
           if (mounted) setState(() => _status = s);
@@ -60,6 +60,14 @@ class _LoginPageState extends State<LoginPage> {
           if (mounted) setState(() => _authorizeUrl = url);
         },
       );
+      // A degraded session is not a full success: the account authorized, but
+      // no model credential was issued. Say so right here instead of letting
+      // the user hit a confusing failure on the first message.
+      if (s != null && s.issueError != null && mounted) {
+        setState(() =>
+            _failure = '已登录，但模型凭证签发失败：${s.issueError}\n'
+                '可在 设置 › 账号 点击「重新签发」重试。');
+      }
     } catch (e) {
       if (mounted) setState(() => _failure = '$e');
     } finally {
